@@ -9,7 +9,7 @@ import argparse
 import uproot
 import numpy as np
 import pandas as pd
-sys.path.append(os.path.abspath('../../ML4DQM-DC'))
+sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
 import jobsubmission.condortools as ct
 CMSSW = os.path.abspath('../../CMSSW_12_4_6')
 

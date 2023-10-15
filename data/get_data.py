@@ -10,7 +10,7 @@ import numpy as np
 import argparse
 import ROOT
 # local imports
-sys.path.append(os.path.abspath('../../ML4DQM-DC'))
+sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
 from dqmio.src.DQMIOReader import DQMIOReader
 import dqmio.src.tools as dqmiotools
 import jobsubmission.condortools as ct
