@@ -58,14 +58,23 @@ if __name__=='__main__':
   cmds = []
   for dataset in datasets:
     for mefile in mefiles:
-      cmd = 'python3 get_data.py'
-      cmd += ' -d {}'.format(dataset)
-      cmd += ' -m {}'.format(mefile)
-      if args.proxy is not None: cmd += ' -p {}'.format(args.proxy)
-      cmd += ' -r {}'.format(args.redirector)
-      cmd += ' -o {}'.format(args.outputdir)
-      if args.test: cmd += ' --test'
-      cmd += ' --runmode local'
+      islocal = os.path.exists(dataset)
+      if islocal:
+        cmd = 'python3 get_data_local.py'
+        cmd += ' -d {}'.format(dataset)
+        cmd += ' -m {}'.format(mefile)
+        cmd += ' -o {}'.format(args.outputdir)
+        #if args.test: cmd += ' --test'
+        cmd += ' --runmode local'
+      else:
+        cmd = 'python3 get_data.py'
+        cmd += ' -d {}'.format(dataset)
+        cmd += ' -m {}'.format(mefile)
+        if args.proxy is not None: cmd += ' -p {}'.format(args.proxy)
+        cmd += ' -r {}'.format(args.redirector)
+        cmd += ' -o {}'.format(args.outputdir)
+        if args.test: cmd += ' --test'
+        cmd += ' --runmode local'
       cmds.append(cmd)
 
   # limit for testing

@@ -48,7 +48,10 @@ if __name__=='__main__':
         if ';' in hname: hname = hname.split(';')[0]
         hnames.append(hname)
       # get histogram data
-      hists = [f[key].values().astype(int) for key in keys]
+      # note: flatten appears to be needed for 2D histograms,
+      #       as conversion to parquet does not work for multidim arrays;
+      #       the inverse operation (np.reshape) must be called when reading the dataframe.
+      hists = [f[key].values().astype(int).flatten() for key in keys]
       entries = np.array([np.sum(hist) for hist in hists], dtype=int)
       # get metadata (assume the same for all histograms in input file!)
       h = f[keys[0]]
