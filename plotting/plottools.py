@@ -66,7 +66,8 @@ def plot_lumisection( hists,
                         title=subtitle_map[key], titlesize=titlesize,
                         xaxtitle='ix', xaxtitlesize=titlesize,
                         yaxtitle='iy', yaxtitlesize=titlesize,
-                        docolorbar=False, caxrange=(vmin,vmax), **kwargs)
+                        docolorbar=False, caxrange=(vmin,vmax), 
+                        **kwargs)
         
     # add a colorbar
     fig.subplots_adjust(right=0.9)
