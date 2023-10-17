@@ -19,12 +19,26 @@ if __name__=='__main__':
   # read arguments
   parser = argparse.ArgumentParser(description='Convert data')
   parser.add_argument('-i', '--inputfiles', required=True, nargs='+')
+  parser.add_argument('--runmode', default='local', choices=['local','condor'])
   args = parser.parse_args()
 
   # print arguments
   print('Running with following configuration:')
   for arg in vars(args):
     print('  - {}: {}'.format(arg,getattr(args,arg)))
+
+  # handle job submission if requested
+  if args.runmode=='condor':
+    cmd = 'python3 convert_data.py'
+    cmd += ' -i {}'.format(' '.join(args.inputfiles))
+    cmd += ' --runmode local'
+    ct.submitCommandAsCondorJob('cjob_convert_data', cmd,
+      cmssw_version=CMSSW, home='auto')
+    sys.exit()
+
+  # print starting tag (for job completion checking)
+  sys.stderr.write('###starting###\n')
+  sys.stderr.flush()
 
   # loop over input files
   for fidx,inputfile in enumerate(args.inputfiles):
@@ -34,6 +48,7 @@ if __name__=='__main__':
     dfdict = {}
 
     # open input file
+    print('Opening file...')
     with uproot.open(inputfile) as f:
       # get runs, lumis and histogram names
       keys = list(f.keys())
@@ -47,12 +62,28 @@ if __name__=='__main__':
         hname = parts[2]
         if ';' in hname: hname = hname.split(';')[0]
         hnames.append(hname)
+      # printouts
+      unique_ls = [run*1e4+lumi for run,lumi in zip(runs,lumis)]
+      print('Found {} keys, corresponding to {} lumisections for {} MEs.'.format(
+        len(keys), len(set(unique_ls)), len(set(hnames))))
       # get histogram data
       # note: flatten appears to be needed for 2D histograms,
       #       as conversion to parquet does not work for multidim arrays;
       #       the inverse operation (np.reshape) must be called when reading the dataframe.
-      hists = [f[key].values().astype(int).flatten() for key in keys]
+      print('Reading histograms...')
+      sys.stdout.flush()
+      hists = []
+      for idx,key in enumerate(keys):
+        count = idx+1
+        if( (count<=100 and count%10==0)
+            or (count<=1000 and count%100==0)
+            or count%1000==0 ):
+          print('Processed {} out of {} entries'.format(count, len(keys)))
+          sys.stdout.flush()
+        hists.append(f[key].values().astype(int).flatten())
       entries = np.array([np.sum(hist) for hist in hists], dtype=int)
+      print('Reading meta-info...')
+      sys.stdout.flush()
       # get metadata (assume the same for all histograms in input file!)
       h = f[keys[0]]
       xbins = h.axis('x').edges()
@@ -84,6 +115,7 @@ if __name__=='__main__':
         print('  nybins: {}'.format(nybins))
         print('  ymin: {}'.format(ymin))
         print('  ymax: {}'.format(ymax))
+        sys.stdout.flush()
       # append all info
       dfdict['fromrun'] = np.array(runs, dtype=int)
       dfdict['fromlumi'] = np.array(lumis, dtype=int)
@@ -99,8 +131,14 @@ if __name__=='__main__':
       dfdict['Ybins'] = (np.ones(len(lumis))*nybins).astype(int)
       
     # make a dataframe
+    print('Converting to DataFrame...')
     df = pd.DataFrame(dfdict)
 
     # write output file
+    print('Writing output file...')
     outputfile = inputfile.replace('.root', '.parquet')
     df.to_parquet(outputfile)
+
+  # print finishing tag (for job completion checking)
+  sys.stderr.write('###done###\n')
+  sys.stderr.flush()

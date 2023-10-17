@@ -9,12 +9,21 @@ import json
 import numpy as np
 import argparse
 import ROOT
-# local imports
-sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
-from dqmio.src.DQMIOReader import DQMIOReader
-import dqmio.src.tools as dqmiotools
-import jobsubmission.condortools as ct
-CMSSW = os.path.abspath('../../CMSSW_12_4_6')
+# local imports (python3 version)
+#sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
+#from dqmio.src.DQMIOReader import DQMIOReader
+#import dqmio.src.tools as dqmiotools
+#import jobsubmission.condortools as ct
+#CMSSW = os.path.abspath('../../CMSSW_12_4_6')
+#PYTHON_EXE = 'python3'
+# local imports (python2 version)
+sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/dqmio/src'))
+from DQMIOReader import DQMIOReader
+import tools as dqmiotools
+sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/jobsubmission'))
+import condortools as ct
+CMSSW = os.path.abspath('../../CMSSW_10_6_29')
+PYTHON_EXE = 'python'
 
 
 if __name__=='__main__':
@@ -38,7 +47,7 @@ if __name__=='__main__':
 
   # handle job submission if requested
   if args.runmode=='condor':
-    cmd = 'python3 get_data.py'
+    cmd = PYTHON_EXE + ' get_data.py'
     cmd += ' -d {}'.format(args.datasetname)
     cmd += ' -m {}'.format(args.menames)
     if args.proxy is not None: cmd += ' -p {}'.format(args.proxy)
@@ -49,6 +58,10 @@ if __name__=='__main__':
     ct.submitCommandAsCondorJob('cjob_get_data', cmd,
       cmssw_version=CMSSW, proxy=args.proxy, home='auto')
     sys.exit()
+
+  # print starting tag (for job completion checking)
+  sys.stderr.write('###starting###\n')
+  sys.stderr.flush()
 
   # export the proxy
   if args.proxy is not None: dqmiotools.export_proxy( args.proxy )
@@ -78,7 +91,7 @@ if __name__=='__main__':
   print('Initializing DQMIOReader...')
   sys.stdout.flush()
   sys.stderr.flush()
-  reader = DQMIOReader(*inputfiles, sortindex=True)
+  reader = DQMIOReader(*inputfiles, sortindex=True, nthreads=1)
   print('Initialized DQMIOReader with following properties')
   print('Number of lumisections: {}'.format(len(reader.listLumis())))
   print('Number of monitoring elements per lumisection: {}'.format(len(reader.listMEs())))
@@ -92,6 +105,7 @@ if __name__=='__main__':
 
     # write selected monitoring elements to output file
     print('Writing output file...')
+    if not os.path.exists(args.outputdir): os.makedirs(args.outputdir)
     outputfile = (args.datasetname+'-'+mename).strip('/').replace('/','-')+'.root'
     outputfile = os.path.join(args.outputdir, outputfile)
     f = ROOT.TFile.Open(outputfile, 'recreate')
@@ -101,3 +115,7 @@ if __name__=='__main__':
       me.data.SetTitle(name)
       me.data.Write()
     f.Close()
+
+  # print finishing tag (for job completion checking)
+  sys.stderr.write('###done###\n')
+  sys.stderr.flush()

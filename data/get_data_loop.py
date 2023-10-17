@@ -8,10 +8,16 @@ import sys
 import os
 import json
 import argparse
-# local imports
-sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
-import jobsubmission.condortools as ct
-CMSSW = os.path.abspath('../../CMSSW_12_4_6')
+# local imports (python3 version)
+#sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
+#import jobsubmission.condortools as ct
+#CMSSW = os.path.abspath('../../CMSSW_12_4_6')
+#PYTHON_EXE = 'python3'
+# local imports (python2 version)
+sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/jobsubmission'))
+import condortools as ct
+CMSSW = os.path.abspath('../../CMSSW_10_6_29')
+PYTHON_EXE = 'python'
 
 
 if __name__=='__main__':
@@ -60,14 +66,14 @@ if __name__=='__main__':
     for mefile in mefiles:
       islocal = os.path.exists(dataset)
       if islocal:
-        cmd = 'python3 get_data_local.py'
+        cmd = PYTHON_EXE + ' get_data_local.py'
         cmd += ' -d {}'.format(dataset)
         cmd += ' -m {}'.format(mefile)
         cmd += ' -o {}'.format(args.outputdir)
         #if args.test: cmd += ' --test'
         cmd += ' --runmode local'
       else:
-        cmd = 'python3 get_data.py'
+        cmd = PYTHON_EXE + ' get_data.py'
         cmd += ' -d {}'.format(dataset)
         cmd += ' -m {}'.format(mefile)
         if args.proxy is not None: cmd += ' -p {}'.format(args.proxy)
