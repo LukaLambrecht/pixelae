@@ -15,6 +15,12 @@ importlib.reload(utils.plot_utils)
 import utils.plot_utils as pu
 
 
+def plot_histogram( hist, **kwargs ):
+    ### make a plot of a single pixel endcap disk histogram
+    # note: simple wrapper around plotting tools from ML4DQM repo
+    fig, ax = pu.plot_hist_2d(hist, **kwargs)
+    return (fig, ax)
+
 def plot_lumisection( hists, 
                       title=None, titlesize=None,
                       caxtitle=None, caxtitlesize=None,
