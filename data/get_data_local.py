@@ -8,6 +8,7 @@
 import sys
 import os
 import json
+import numpy as np
 import argparse
 import ROOT
 # local imports (python3 version)
@@ -116,13 +117,21 @@ if __name__=='__main__':
     print('Selecting monitoring element {}...'.format(mename))
     mes = reader.getSingleMEs(mename)
 
+    # sort the lumisections
+    print('Sorting lumisections...')
+    runs = np.array([me.run for me in mes]).astype(int)
+    lumis = np.array([me.lumi for me in mes]).astype(int)
+    ids = (runs*10000 + lumis).astype(int)
+    sorted_inds = np.argsort(ids)
+
     # write selected monitoring elements to output file
     print('Writing output file...')
     if not os.path.exists(args.outputdir): os.makedirs(args.outputdir)
     outputfile = (format_dataset_name(args.datasetname)+'-'+mename).strip('/').replace('/','-')+'.root'
     outputfile = os.path.join(args.outputdir, outputfile)
     f = ROOT.TFile.Open(outputfile, 'recreate')
-    for me in mes:
+    for idx in sorted_inds:
+      me = mes[idx]
       name = 'run{}_ls{}_{}'.format(me.run, me.lumi, me.name.replace('/','_'))
       me.data.SetName(name)
       me.data.SetTitle(name)

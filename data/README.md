@@ -43,6 +43,10 @@ while it runs fine with CMSSW 10.6.29 and python2, probably because of ROOT...
 Note: seems to give non-deterministic errors when run in multithreaded mode in jobs,
 instead run with one thread.
 Size of resulting data: 23 GB.
+Note: sorting of lumisections in the output files was added on 1 Nov 2023,
+but rerunning not yet done, so lumisections in current ROOT files are likely unsorted.
+Instead of rerunning the conversion to ROOT files, 
+add sorting in conversion to parquet as well and only rerun that step.
 
 ### Conversion to parquet files
 Performed on 17 Oct 2023.
@@ -50,6 +54,8 @@ Note: parquet files apparently are not automatically overwritten,
 instead the script fails and raises an error upon writing attempt,
 so need to manually remove parquet files before re-running.
 Size of resulting data: 15 GB.
+Note: sorting of lumisections in the output files was added on 1 Nov 2023,
+and this step was rerun to have correctly sorted dataframes.
 
 ### Check of available lumisections
 No missing lumisections in parquet files with respect to DAS,

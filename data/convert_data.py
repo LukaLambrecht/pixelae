@@ -51,7 +51,7 @@ if __name__=='__main__':
     print('Opening file...')
     with uproot.open(inputfile) as f:
       # get runs, lumis and histogram names
-      keys = list(f.keys())
+      keys = np.array(list(f.keys()))
       runs = []
       lumis = []
       hnames = []
@@ -62,10 +62,20 @@ if __name__=='__main__':
         hname = parts[2]
         if ';' in hname: hname = hname.split(';')[0]
         hnames.append(hname)
+      runs = np.array(runs).astype(int)
+      lumis = np.array(lumis).astype(int)
+      hnames = np.array(hnames)
+      # do sorting
+      print('Sorting lumisections...')
+      ids = (runs*10000 + lumis).astype(int)
+      sorted_inds = np.argsort(ids)
+      keys = keys[sorted_inds]
+      runs = runs[sorted_inds]
+      lumis = lumis[sorted_inds]
+      hnames = hnames[sorted_inds]
       # printouts
-      unique_ls = [run*1e4+lumi for run,lumi in zip(runs,lumis)]
       print('Found {} keys, corresponding to {} lumisections for {} MEs.'.format(
-        len(keys), len(set(unique_ls)), len(set(hnames))))
+        len(keys), len(set(list(ids))), len(set(list(hnames)))))
       # get histogram data
       # note: flatten appears to be needed for 2D histograms,
       #       as conversion to parquet does not work for multidim arrays;
@@ -73,7 +83,8 @@ if __name__=='__main__':
       print('Reading histograms...')
       sys.stdout.flush()
       hists = []
-      for idx,key in enumerate(keys):
+      for idx, key in enumerate(keys):
+        key = keys[idx]
         count = idx+1
         if( (count<=100 and count%10==0)
             or (count<=1000 and count%100==0)
