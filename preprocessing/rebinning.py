@@ -30,10 +30,14 @@ def rebin_keep_zero(hists, newshape):
         a[a==0] = np.nan
         a = a.mean(axis=axis)
         np.nan_to_num(a, copy=False)
-        a = a.astype(int) # convert back to integer type
+        # note: do not convert back to int type,
+        # as input histogram might be of type float
+        # (e.g. averaged)
         return a
     temp_shape = hists.shape[0], newshape[0], hists.shape[1]//newshape[0], newshape[1], hists.shape[2]//newshape[1]
     newhists = np.array(hists.reshape(temp_shape))
-    newhists = mean_keep_zero(newhists, axis=-1)
     newhists = mean_keep_zero(newhists, axis=2)
+    newhists = mean_keep_zero(newhists, axis=3)
+    #newhists = np.mean(newhists, axis=-1) # for testing, regular mean
+    #newhists = np.mean(newhists, axis=2) # for testing, regular mean
     return newhists

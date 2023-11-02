@@ -60,6 +60,9 @@ if __name__=='__main__':
   #print('Running with following configuration:')
   #for arg in vars(args):
   #  print('  - {}: {}'.format(arg,getattr(args,arg)))
+    
+  # internal parameters
+  idfactor = 10000 # warning: do not use 1e4 instead of 10000 to avoid conversion from int to float
 
   # make a list of datasets
   datasets = []
@@ -79,14 +82,14 @@ if __name__=='__main__':
   print('Checking missing lumisections in files:')
   for dataset in datasets:
     refruns, reflumis = get_lumis_das(dataset)
-    refids = refruns*1e4 + reflumis
+    refids = refruns*idfactor + reflumis
     print('  Dataset: {} ({} lumisections)'.format(dataset, len(refruns)))
     # loop over corresponding files
     parquetfiles = dataset_files[dataset.replace('-','').replace('/','')]
     print('  Corresponding files ({}):'.format(len(parquetfiles)))
     for parquetfile in parquetfiles:
       runs, lumis = get_lumis_parquet(parquetfile)
-      ids = runs*1e4 + lumis
+      ids = runs*idfactor + lumis
       missing = np.setdiff1d(refids, ids)
       print('    - File: {}: {} missing lumisections'.format(parquetfile, len(missing)))
 
@@ -95,7 +98,7 @@ if __name__=='__main__':
   allids = np.array([])
   for dataset in datasets:
     runs, lumis = get_lumis_das(dataset)
-    ids = runs*1e4 + lumis
+    ids = runs*idfactor + lumis
     unique = np.setdiff1d(ids, allids)
     allids = np.concatenate((allids, unique))
     print('  Dataset: {}: {} lumisections of which {} unique'.format(dataset, len(ids), len(unique)))
@@ -106,7 +109,7 @@ if __name__=='__main__':
   for dataset in datasets:
     parquetfile = dataset_files[dataset.replace('-','').replace('/','')][0]
     runs, lumis = get_lumis_parquet(parquetfile)
-    ids = runs*1e4 + lumis
+    ids = runs*idfactor + lumis
     unique = np.setdiff1d(ids, allids)
     allids = np.concatenate((allids, unique))
     print('  File: {}: {} lumisections of which {} unique'.format(parquetfile, len(ids), len(unique)))

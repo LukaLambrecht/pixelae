@@ -23,7 +23,7 @@ class PreProcessor(object):
                  rebin_target=None, # target shape for rebinning
                  omsjson=None, # json file or object with oms data
                  oms_normalization_attr=None, # oms attribute for normalization
-                 spatial_response=None, # histogram for spatial response correction
+                 spatial_normalization=None, # histogram for spatial normalization
                 ):
         self.crop = crop
         self.time_average_radii = time_average_radii
@@ -35,7 +35,7 @@ class PreProcessor(object):
         self.oms_normalization_attr = oms_normalization_attr
         if self.oms_normalization_attr is not None:
             if self.omsjson is None: raise Exception('ERROR: omsjson must be specified if oms_normalization_attr is set.')
-        self.spatial_response = spatial_response
+        self.spatial_normalization = spatial_normalization
     
     def preprocess(self, histograms, runs=None, lumis=None):
         ### preprocess a set of histograms
@@ -62,13 +62,12 @@ class PreProcessor(object):
             if lumis is None: raise Exception('ERROR: lumis must be specified if oms_normalization_attr is set.')
             histograms = normalize_by_omsjson(histograms, runs, lumis, self.omsjson, self.oms_normalization_attr)
         
-        # spatial response correction
-        if self.spatial_response is not None:
-            avg_occupancy = self.spatial_response
-            if( isinstance(self.spatial_response, str) and self.spatial_response=='auto' ):
+        # spatial normalization
+        if self.spatial_normalization is not None:
+            avg_occupancy = self.spatial_normalization
+            if( isinstance(self.spatial_normalization, str) and self.spatial_normalization=='auto' ):
                 avg_occupancy = np.mean(histograms, axis=0)
             avg_occupancy[avg_occupancy==0] = 1
             histograms = np.divide(histograms[:], avg_occupancy)
-        
             
         return histograms
