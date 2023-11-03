@@ -19,7 +19,7 @@ def normalize_by_external(histograms, normvalues, zerohandling='ones'):
             print(msg)
             for idx in np.nonzero(normvalues==0)[0]:
                 try: normvalues[idx] = (normvalues[idx-1] + normvalues[idx+1])/2.
-                except pass
+                except: pass
             return normalize_by_external(histograms, normvalues, zerohandling='ones')
         else: raise Exception('ERROR: zero handling {} not recognized.'.format(zerohandling))
     return np.divide(histograms, normvalues[:, None, None])

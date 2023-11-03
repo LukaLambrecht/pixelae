@@ -36,6 +36,22 @@ class PreProcessor(object):
         if self.oms_normalization_attr is not None:
             if self.omsjson is None: raise Exception('ERROR: omsjson must be specified if oms_normalization_attr is set.')
         self.spatial_normalization = spatial_normalization
+        
+    def __str__(self):
+        ### get string representation
+        # useful for documenting and keeping track what preprocessing was used
+        res = 'PreProcessor instance with following attributes:\n'
+        res += ' - crop: {}\n'.format(self.crop)
+        res += ' - time_average_radii: {}\n'.format(self.time_average_radii)
+        res += ' - rebin_target: {}\n'.format(self.rebin_target)
+        omsjson_str = self.omsjson
+        if omsjson_str is not None: omsjson_str = '<loaded>'
+        res += ' - omsjson: {}\n'.format(omsjson_str)
+        res += ' - oms_normalization_attr: {}\n'.format(self.oms_normalization_attr)
+        spatial_normalization_str = self.spatial_normalization
+        if isinstance(spatial_normalization_str, np.ndarray): spatial_normalization_str = '<ndarray>'
+        res += ' - spatial_normalization: {}'.format(spatial_normalization_str)
+        return res
     
     def preprocess(self, histograms, runs=None, lumis=None):
         ### preprocess a set of histograms
