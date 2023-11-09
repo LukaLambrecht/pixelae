@@ -1,0 +1,12 @@
+Vicha's implementation
+- https://github.com/vicha-w/MLDQM-scripts/blob/main/resnet_minsky_zphi_v5.py
+
+ECAL barrel implementation
+- https://indico.cern.ch/event/1342266/
+- https://indico.cern.ch/event/1106990/contributions/4998187/
+
+ECAL endcap implementation
+- https://indico.cern.ch/event/1152156/
+
+General
+- https://towardsdatascience.com/residual-blocks-building-blocks-of-resnet-fd90ca15d6ec
