@@ -27,27 +27,36 @@ if __name__=='__main__':
   ])
 
   # define eras
-  eras = ([
-    'Run2023C-PromptReco-v1',
-    'Run2023C-PromptReco-v2',
-    'Run2023C-PromptReco-v3',
-    'Run2023C-PromptReco-v4',
-    'Run2023D-PromptReco-v1',
-    'Run2023D-PromptReco-v2',
-    #'Run2023E-PromptReco-v1', # low occupancy
-    #'Run2023F-PromptReco-v1', # low occupancy
-  ])
+  eras = ({
+    'Run2023C-v1': ['Run2023C-PromptReco-v1'],
+    'Run2023C-v2': ['Run2023C-PromptReco-v2'],
+    'Run2023C-v3': ['Run2023C-PromptReco-v3'],
+    'Run2023C-v4': ['Run2023C-PromptReco-v4'],
+    'Run2023D-v1': ['Run2023D-PromptReco-v1'],
+    'Run2023D-v2': ['Run2023D-PromptReco-v2'],
+    #'Run2023E-v1': ['Run2023E-PromptReco-v1'], # low occupancy
+    #'Run2023F-v1': ['Run2023F-PromptReco-v1'], # low occupancy
+    'Run2023': [
+        'Run2023C-PromptReco-v1',
+        'Run2023C-PromptReco-v2',
+        'Run2023C-PromptReco-v3',
+        'Run2023C-PromptReco-v4',
+        'Run2023D-PromptReco-v1',
+        'Run2023D-PromptReco-v2',
+    ]
+  })
 
   # define input and output files
   datadir = '/pnfs/iihe/cms/store/user/llambrec/dqmio/'
   inputfiles = {}
   outputfiles = {}
   for me in mes:
-    mefiles = ['ZeroBias-{}-DQMIO-{}_preprocessed.parquet'.format(era, me) for era in eras]
-    mefiles = [os.path.join(datadir, f) for f in mefiles]
-    inputfiles[me] = mefiles
-    modelfile = 'model_20231110_{}.keras'.format(me)
-    outputfiles[me] = modelfile
+    for eraname, eratags in eras.items():
+      mefiles = ['ZeroBias-{}-DQMIO-{}_preprocessed.parquet'.format(eratag, me) for eratag in eratags]
+      modelfile = 'model_20231115_{}_{}.keras'.format(eraname, me)
+      mefiles = [os.path.join(datadir, f) for f in mefiles]
+      inputfiles[me+'_'+eraname] = mefiles
+      outputfiles[me+'_'+eraname] = modelfile
 
   # define other settings
   settings = ({
@@ -63,15 +72,18 @@ if __name__=='__main__':
 
   # make commands
   cmds = []
-  for me in mes:
-    cmd = 'python3 training_naive.py'
-    cmd += ' -i {}'.format(' '.join(inputfiles[me]))
-    cmd += ' -o {}'.format(outputfiles[me])
-    cmd += ' --runmode local'
-    for arg, val in settings.items():
-      cmd += ' --{} {}'.format(arg, val)
-    cmds.append(cmd)
+  for eraname in eras.keys():
+    cmds.append([])
+    for me in mes:
+      cmd = 'python3 training_naive.py'
+      cmd += ' -i {}'.format(' '.join(inputfiles[me+'_'+eraname]))
+      cmd += ' -o {}'.format(outputfiles[me+'_'+eraname])
+      cmd += ' --runmode local'
+      for arg, val in settings.items():
+        cmd += ' --{} {}'.format(arg, val)
+      cmds[-1].append(cmd)
 
   # submit jobs
-  ct.submitCommandsAsCondorCluster('cjob_training_naive', cmds,
-      cmssw_version=CMSSW, home='auto')
+  for cmdset in cmds:
+    ct.submitCommandsAsCondorCluster('cjob_training_naive', cmdset,
+        cmssw_version=CMSSW, home='auto')

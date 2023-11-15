@@ -10,6 +10,12 @@
 # ignore all temporary job files
 **cjob_**
 
+# ignore all numpy files
+**.npy
+
+# ignore all keras model files
+**.keras
+
 # ingore all plot and output folders
 **plots_**
 **output_**
