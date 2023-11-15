@@ -35,6 +35,7 @@ if __name__=='__main__':
   parser.add_argument('--batch_size', default=32, type=int)
   parser.add_argument('--epochs', default=5, type=int)
   parser.add_argument('--validation_split', default=0.1, type=float)
+  parser.add_argument('--store_average_occupancy', default=0, type=int)
   parser.add_argument('--store_average_response', default=0, type=int)
   parser.add_argument('--runmode', default='local', choices=['local', 'condor'])
   args = parser.parse_args()
@@ -90,6 +91,13 @@ if __name__=='__main__':
   # store the model
   model.save(args.outputfile)
 
+  # store average occupancy
+  if args.store_average_occupancy:
+    outputfile = os.path.splitext(args.outputfile)[0] + '_avgoccupancy.npy'
+    avgoccupancy = np.mean(training_data, axis=0)[:,:,0]
+    np.save(outputfile, avgoccupancy)
+
+  # store average error
   if args.store_average_response>0:
     # evaluate model on training set and calculate average response
     predictions = model.predict(training_data)
