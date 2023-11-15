@@ -12,7 +12,7 @@ def residual_block_enc(x, filter_number, kernel_size, strides=1, **kwargs):
     y = Conv2D(filter_number, kernel_size, strides=1, **kwargs)(y)
     x = Conv2D(filter_number, 1, strides=strides, **kwargs)(x)
     out = Add()([x, y])
-    out = ReLU()(out)
+    #out = ReLU()(out)
     return out
 
 def residual_block_dec(x, filter_number, kernel_size, strides=1, **kwargs):
@@ -21,7 +21,7 @@ def residual_block_dec(x, filter_number, kernel_size, strides=1, **kwargs):
     y = Conv2DTranspose(filter_number, kernel_size, strides=1, **kwargs)(y)
     x = Conv2DTranspose(filter_number, 1, strides=strides, **kwargs)(x)
     out = Add()([x, y])
-    out = ReLU()(out)
+    #out = ReLU()(out)
     return out
 
 def model_dummy( input_shape ):

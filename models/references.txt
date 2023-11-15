@@ -10,3 +10,4 @@ ECAL endcap implementation
 
 General
 - https://towardsdatascience.com/residual-blocks-building-blocks-of-resnet-fd90ca15d6ec
+- https://keras.io/examples/vision/edsr/
