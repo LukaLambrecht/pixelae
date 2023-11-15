@@ -65,7 +65,7 @@ if __name__=='__main__':
     'loss': 'mse',
     'optimizer': 'adam',
     'batch_size': 32,
-    'epochs': 30,
+    'epochs': 50,
     'validation_split': 0.1,
     'store_average_occupancy': 1,
     'store_average_response': 1
