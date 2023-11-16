@@ -62,10 +62,11 @@ if __name__=='__main__':
   settings = ({
     'entries_threshold': 10000,
     'skip_first_lumisections': 5,
+    'veto_patterns': 1,
     'loss': 'mse',
     'optimizer': 'adam',
     'batch_size': 32,
-    'epochs': 50,
+    'epochs': 10,
     'validation_split': 0.1,
     'store_average_occupancy': 1,
     'store_average_response': 1
