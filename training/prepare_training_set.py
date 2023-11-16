@@ -2,12 +2,17 @@ import sys
 import os
 import numpy as np
 import pandas as pd
+# local modules
+from patternfiltering import contains_any_pattern
+
 
 def prepare_training_data_from_file( 
     parquet_file,
     verbose=False,
     entries_threshold=None,
-    skip_first_lumisections=None ):
+    skip_first_lumisections=None,
+    required_patterns=None,
+    veto_patterns=None ):
     
     # read the dataframe and get histograms
     if verbose: print('Loading file {}'.format(parquet_file))
@@ -25,6 +30,9 @@ def prepare_training_data_from_file(
         print('  Runs: {}'.format(runs))
         print('  Lumis: {}'.format(lumis))
         print('  Entries: {}'.format(entries))
+    
+    # make a mask where values are often zero
+    shape_mask = (np.sum(hists==0, axis=0)>nhists/2.)
 
     # filter on number of entries
     if entries_threshold is not None:
@@ -41,7 +49,23 @@ def prepare_training_data_from_file(
         if verbose:
             print('  Passing lumisection skip: {} ({:.2f} %)'.format(
                   np.sum(lumisection_mask), np.sum(lumisection_mask)/nhists*100))
-        
+    
+    # filter on required patterns
+    if required_patterns is not None:
+        pattern_mask = (contains_any_pattern(hists, required_patterns, mask=~shape_mask))
+        masks.append(pattern_mask)
+        if verbose:
+            print('  Passing required patterns: {} ({:.2f} %)'.format(
+                  np.sum(pattern_mask), np.sum(pattern_mask)/nhists*100))
+    
+    # filter on veto patterns
+    if veto_patterns is not None:
+        pattern_mask = ~(contains_any_pattern(hists, veto_patterns, mask=~shape_mask))
+        masks.append(pattern_mask)
+        if verbose:
+            print('  Passing veto patterns: {} ({:.2f} %)'.format(
+                  np.sum(pattern_mask), np.sum(pattern_mask)/nhists*100))
+    
     # other filters (to implement)
     
     # filter and format data
