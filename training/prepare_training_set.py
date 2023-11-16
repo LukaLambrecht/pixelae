@@ -3,7 +3,8 @@ import os
 import numpy as np
 import pandas as pd
 # local modules
-from patternfiltering import contains_any_pattern
+sys.path.append('../')
+from training.patternfiltering import contains_any_pattern
 
 
 def prepare_training_data_from_file( 
