@@ -30,6 +30,7 @@ if __name__=='__main__':
   parser.add_argument('-o', '--outputfile', required=True)
   parser.add_argument('--entries_threshold', default=0, type=int)
   parser.add_argument('--skip_first_lumisections', default=0, type=int)
+  parser.add_argument('--veto_patterns', default=0, type=int)
   parser.add_argument('--loss', default='mse')
   parser.add_argument('--optimizer', default='adam')
   parser.add_argument('--batch_size', default=32, type=int)
@@ -68,10 +69,11 @@ if __name__=='__main__':
     'entries_threshold': args.entries_threshold,
     'skip_first_lumisections': args.skip_first_lumisections
   })
+  if args.veto_patterns > 0: kwargs['veto_patterns'] = [np.zeros((2,2)), np.zeros((3,1)), np.zeros((1,3))]
   (training_data, training_runs, training_lumis) = prepare_training_data_from_files(args.inputfiles, **kwargs)
   
-  # make a mask where values are always zero
-  shape_mask = (np.sum(training_data, axis=0)==0)[:,:,0]
+  # make a mask where values are often zero
+  shape_mask = (np.sum(training_data[:,:,:,0]==0, axis=0)>len(training_data)/2.)
 
   # initialize model
   input_shape = training_data.shape[1:]
