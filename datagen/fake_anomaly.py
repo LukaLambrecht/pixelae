@@ -5,6 +5,7 @@ rng = np.random.default_rng()
 def rectangle_mask(shape,
     rectangle_anchor='random',
     rectangle_shape='random',
+    rectangle_min_pixels=None,
     shape_mask=None):
     # mask a rectangle with specified location and size
     mask = np.zeros(shape).astype(bool)
@@ -16,15 +17,24 @@ def rectangle_mask(shape,
         dx = rng.integers(low=1, high=int(shape[0]/5.)) # random between 1 and a fraction of the width
         dy = rng.integers(low=1, high=int(shape[1]/5.)) # random between 1 and a fraction of the height
     else: dx,dy = rectangle_shape
+    if(dx*dy < rectangle_min_pixels):
+        return rectangle_mask(shape, rectangle_anchor=rectangle_anchor,
+                              rectangle_shape=rectangle_shape, 
+                              rectangle_min_pixels=rectangle_min_pixels,
+                              shape_mask=shape_mask)
     if(x+dx >= shape[0] or y+dy >= shape[1]):
         return rectangle_mask(shape, rectangle_anchor=rectangle_anchor,
-                              rectangle_shape=rectangle_shape, shape_mask=shape_mask)
+                              rectangle_shape=rectangle_shape, 
+                              rectangle_min_pixels=rectangle_min_pixels,
+                              shape_mask=shape_mask)
     mask[x:x+dx, y:y+dy] = True
     paramdict = {'rectangle_anchor': (x,y), 'rectangle_shape': (dx,dy)}
     if shape_mask is not None:
         if np.any((mask & ~shape_mask)):
             return rectangle_mask(shape, rectangle_anchor=rectangle_anchor,
-                                  rectangle_shape=rectangle_shape, shape_mask=shape_mask)
+                                  rectangle_shape=rectangle_shape,
+                                  rectangle_min_pixels=rectangle_min_pixels,
+                                  shape_mask=shape_mask)
     return (mask, paramdict)
 
 def sector_mask(shape,

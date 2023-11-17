@@ -29,8 +29,8 @@ def contains_pattern(hists, pattern, mask=None):
     res = np.zeros(len(hists)).astype(bool)
     for i, hist in enumerate(hists):
         M = cv2.matchTemplate(hist.astype(np.float32), pattern.astype(np.float32), cv2.TM_SQDIFF)
-        if np.any(M==0): res[i] = True
-        rows, columns = np.where(M==0)
+        if np.any(M<1e-6): res[i] = True
+        rows, columns = np.where(M<1e-6)
     return res
 
 def contains_any_pattern(hists, patterns, mask=None):
