@@ -17,7 +17,7 @@ def rectangle_mask(shape,
         dx = rng.integers(low=1, high=int(shape[0]/5.)) # random between 1 and a fraction of the width
         dy = rng.integers(low=1, high=int(shape[1]/5.)) # random between 1 and a fraction of the height
     else: dx,dy = rectangle_shape
-    if(dx*dy < rectangle_min_pixels):
+    if(rectangle_min_pixels is not None and dx*dy < rectangle_min_pixels):
         return rectangle_mask(shape, rectangle_anchor=rectangle_anchor,
                               rectangle_shape=rectangle_shape, 
                               rectangle_min_pixels=rectangle_min_pixels,
