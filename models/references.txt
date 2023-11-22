@@ -4,9 +4,11 @@ Vicha's implementation
 ECAL barrel implementation
 - https://indico.cern.ch/event/1342266/
 - https://indico.cern.ch/event/1106990/contributions/4998187/
+- https://github.com/kyungminparkdrums/ML4ECALDQM/blob/master/resnetAE_EBocc_pad.ipynb (?)
 
 ECAL endcap implementation
 - https://indico.cern.ch/event/1152156/
+- https://github.com/kyungminparkdrums/ML4ECALDQM/blob/master/resnetAE_EEocc.ipynb (?)
 
 General
 - https://towardsdatascience.com/residual-blocks-building-blocks-of-resnet-fd90ca15d6ec
