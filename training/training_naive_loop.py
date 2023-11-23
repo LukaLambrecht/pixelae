@@ -29,21 +29,21 @@ if __name__=='__main__':
   # define eras
   eras = ({
     'Run2023C-v1': ['Run2023C-PromptReco-v1'],
-    'Run2023C-v2': ['Run2023C-PromptReco-v2'],
-    'Run2023C-v3': ['Run2023C-PromptReco-v3'],
-    'Run2023C-v4': ['Run2023C-PromptReco-v4'],
-    'Run2023D-v1': ['Run2023D-PromptReco-v1'],
-    'Run2023D-v2': ['Run2023D-PromptReco-v2'],
+    #'Run2023C-v2': ['Run2023C-PromptReco-v2'],
+    #'Run2023C-v3': ['Run2023C-PromptReco-v3'],
+    #'Run2023C-v4': ['Run2023C-PromptReco-v4'],
+    #'Run2023D-v1': ['Run2023D-PromptReco-v1'],
+    #'Run2023D-v2': ['Run2023D-PromptReco-v2'],
     #'Run2023E-v1': ['Run2023E-PromptReco-v1'], # low occupancy
     #'Run2023F-v1': ['Run2023F-PromptReco-v1'], # low occupancy
-    'Run2023': [
-        'Run2023C-PromptReco-v1',
-        'Run2023C-PromptReco-v2',
-        'Run2023C-PromptReco-v3',
-        'Run2023C-PromptReco-v4',
-        'Run2023D-PromptReco-v1',
-        'Run2023D-PromptReco-v2',
-    ]
+    #'Run2023': [
+    #    'Run2023C-PromptReco-v1',
+    #    'Run2023C-PromptReco-v2',
+    #    'Run2023C-PromptReco-v3',
+    #    'Run2023C-PromptReco-v4',
+    #    'Run2023D-PromptReco-v1',
+    #    'Run2023D-PromptReco-v2',
+    #]
   })
 
   # define input and output files
@@ -53,7 +53,7 @@ if __name__=='__main__':
   for me in mes:
     for eraname, eratags in eras.items():
       mefiles = ['ZeroBias-{}-DQMIO-{}_preprocessed.parquet'.format(eratag, me) for eratag in eratags]
-      modelfile = 'model_20231115_{}_{}.keras'.format(eraname, me)
+      modelfile = 'model_20231123_{}_{}.keras'.format(eraname, me)
       mefiles = [os.path.join(datadir, f) for f in mefiles]
       inputfiles[me+'_'+eraname] = mefiles
       outputfiles[me+'_'+eraname] = modelfile
@@ -66,7 +66,7 @@ if __name__=='__main__':
     'loss': 'mse',
     'optimizer': 'adam',
     'batch_size': 32,
-    'epochs': 10,
+    'epochs': 30,
     'validation_split': 0.1,
     'store_average_occupancy': 1,
     'store_average_response': 1

@@ -9,6 +9,7 @@ import sys
 import os
 import argparse
 import numpy as np
+import keras
 import pandas as pd
 # ML4DQM modules
 sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/jobsubmission'))
@@ -16,8 +17,7 @@ import condortools as ct
 CMSSW = os.path.abspath('../../CMSSW_12_4_6')
 # framework modules
 sys.path.append('../')
-from models.modeldefs import model_dummy
-from models.modeldefs import model_ecal_endcap
+from models.modeldefs import model_mwe_alldisks
 # local modules
 from prepare_training_set import prepare_training_data_from_files
 
@@ -77,8 +77,18 @@ if __name__=='__main__':
 
   # initialize model
   input_shape = training_data.shape[1:]
-  model = model_dummy(input_shape)
+  model = model_mwe_alldisks(input_shape)
   model.compile(loss=args.loss, optimizer=args.optimizer)
+
+  # define callbacks
+  callbacks = []
+  early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', 
+                    patience = 10, restore_best_weights = False)
+  callbacks.append(early_stop)
+  checkpoint = keras.callbacks.ModelCheckpoint(args.outputfile, 
+                    monitor='val_loss', mode='min', 
+                    save_best_only=True, verbose=1)
+  callbacks.append(checkpoint)
 
   # do training
   history = model.fit(
@@ -87,11 +97,12 @@ if __name__=='__main__':
     epochs=args.epochs,
     verbose=True,
     shuffle=True,
-    validation_split=args.validation_split
+    validation_split=args.validation_split,
+    callbacks=callbacks
   )
 
-  # store the model
-  model.save(args.outputfile)
+  # reload the best model saved by the checkpoint callback
+  model = keras.models.load_model(args.outputfile)
 
   # store average occupancy
   if args.store_average_occupancy:
