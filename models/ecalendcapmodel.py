@@ -163,3 +163,120 @@ class ResNetAE(nn.Module):
         x = self.dconv0_relu(x)
             
         return x
+    
+class ResNetAEPixel(nn.Module):
+    '''
+    Define the full ResNet autoencoder model
+    Slightly modified with respect to original to cope with different input shape
+    '''
+    def __init__(self, in_channels, nblocks, fmaps, debug=False):
+        super(ResNetAEPixel, self).__init__()
+
+        self.fmaps = fmaps
+        self.nblocks = nblocks
+        self.in_channels = in_channels
+        self.debug = debug
+        
+        # Initialize encoding layers
+        self.econv0 = nn.Sequential(nn.Conv2d(in_channels, fmaps[0], kernel_size=5, stride=1, padding=(0,0)), nn.ReLU())
+        self.elayer1 = self.block_layers(self.nblocks, [fmaps[0],fmaps[0]], 'enc')
+        self.elayer2 = self.block_layers(1, [fmaps[0],fmaps[1]], 'enc')
+        self.elayer3 = self.block_layers(self.nblocks, [fmaps[1],fmaps[1]], 'enc')
+        
+        # Initialize decoding layers
+        self.fc = nn.Linear(self.fmaps[1], self.fmaps[1]*7*7)
+        self.dlayer3 = self.block_layers(self.nblocks, [fmaps[1],fmaps[1]], 'dec', out_shape=None)
+        self.dlayer2 = self.block_layers(1, [fmaps[1],fmaps[0]], 'dec', out_shape=(14, 14))
+        self.dlayer1 = self.block_layers(self.nblocks, [fmaps[0],fmaps[0]], 'dec', out_shape=None)
+        self.dconv0 = nn.ConvTranspose2d(fmaps[0], in_channels, kernel_size=5, stride=1, padding=(0,0))
+        self.dconv0_relu = nn.ReLU(inplace=True)
+
+    def block_layers(self, nblocks, fmaps, state, out_shape=None):
+        '''
+        Convenience function: append several resnet blocks in sequence
+        '''
+        layers = []
+        for _ in range(nblocks):
+            if state == 'enc':
+                layers.append(ResBlock(fmaps[0], fmaps[1]))
+            else:
+                layers.append(ResBlockTranspose(fmaps[0], fmaps[1], out_shape)) 
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        
+        # Encoding
+        if self.debug: print(x.size(), 'input')
+        if self.debug: print("Encode")
+        x = self.econv0(x)
+        if self.debug: print(x.size(), 'econv0')
+        x = F.max_pool2d(x, kernel_size=2)
+        if self.debug: print(x.size(), 'maxpool')
+
+        x = self.elayer1(x)
+        if self.debug: print(x.size(), 'elayer1')
+        x = self.elayer2(x)
+        if self.debug: print(x.size(), 'elayer2')
+        x = self.elayer3(x)
+        if self.debug: print(x.size(), 'elayer3')
+        
+        # Bottleneck comes from GlobalMaxPool
+        if self.debug: print("Bottleneck")
+        x = F.max_pool2d(x, kernel_size=x.size()[2:])
+        if self.debug: print(x.size(), 'GlobalMaxPool')
+        x = x.view(x.size()[0], -1)
+        if self.debug: print(x.size(), 'flatten')
+        
+        # Expand bottleneck
+        # Dimensions follow encoding steps in reverse, as much as possible
+        if self.debug: print("Expand bottleneck")
+        x = self.fc(x) # expand
+        if self.debug: print(x.size(), 'FC-upsample')
+        x = x.view(-1, self.fmaps[1], 7, 7)
+        if self.debug: print(x.size(), 'reshape')
+        
+        # Decoding
+        if self.debug: print("Decode")
+        x = self.dlayer3(x)
+        if self.debug: print(x.size(), 'dlayer3')
+        x = self.dlayer2(x)
+        if self.debug: print(x.size(), 'dlayer2')
+        x = self.dlayer1(x)
+        if self.debug: print(x.size(), 'dlayer1')
+        
+        x = F.interpolate(x, scale_factor=2)
+        if self.debug: print(x.size(), "interp")
+        x = self.dconv0(x, output_size=(x.size()[0], self.in_channels, 32, 32))
+        if self.debug: print(x.size(), 'dconv0')
+        x = self.dconv0_relu(x)
+            
+        return x
+    
+def training_loop(model, training_data, optimizer, epochs=5, batch_size=32):
+    
+    for e in range(epochs):
+        epoch = e+1
+        s = '>> Epoch %d <<<<<<<<'%(epoch)
+        print(s)
+
+        model.train()
+        now = time.time()
+        batchidx = 0
+        while batchidx*batch_size < training_data.size()[0]:
+            print("  batch {}".format(batchidx+1))
+            X = training_data[batchidx*batch_size:(batchidx+1)*batch_size,:,:,:]
+            # Reset gradient at each batch
+            optimizer.zero_grad()
+            # AE-reconstructed images
+            Xreco = model(X)
+            # Batch-averaged loss
+            loss = F.mse_loss(Xreco, X)
+            # Calculate backprop errors
+            loss.backward()
+            # Update network weights
+            optimizer.step()
+            batchidx += 1
+
+        now = time.time() - now
+        s = '%d: Train time: %.2f min'%(epoch, now/60)
+        print(s)
