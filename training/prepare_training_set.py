@@ -31,9 +31,6 @@ def prepare_training_data_from_file(
         print('  Runs: {}'.format(runs))
         print('  Lumis: {}'.format(lumis))
         print('  Entries: {}'.format(entries))
-    
-    # make a mask where values are often zero
-    shape_mask = (np.sum(hists==0, axis=0)>nhists/2.)
 
     # filter on number of entries
     if entries_threshold is not None:
@@ -50,6 +47,11 @@ def prepare_training_data_from_file(
         if verbose:
             print('  Passing lumisection skip: {} ({:.2f} %)'.format(
                   np.sum(lumisection_mask), np.sum(lumisection_mask)/nhists*100))
+            
+    # make a mask where values are often zero
+    mask_so_far = np.ones(nhists).astype(bool)
+    for mask in masks: mask_so_far = (mask_so_far & mask)
+    shape_mask = (np.sum(hists[mask_so_far]==0, axis=0)>nhists/2.)
     
     # filter on required patterns
     if required_patterns is not None:

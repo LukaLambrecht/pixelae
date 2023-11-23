@@ -25,8 +25,8 @@ def residual_block_dec(x, filter_number, kernel_size, strides=1, endactivation=N
     return out
 
 
-def model_dummy( input_shape ):
-    # for experimenting
+def model_mwe_alldisks( input_shape ):
+    # minimal working example that works relatively well on all disks, november 23 2023
     input_layer = Input(shape=input_shape)
     
     # encoder
