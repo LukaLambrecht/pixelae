@@ -82,29 +82,29 @@ def sector_mask(shape,
 def dead_pixel():
     pass
 
-def dead_rectangle(hist, **kwargs):
-    (mask, paramdict) = rectangle_mask(hist.shape, **kwargs)
-    anomalous_hist = np.copy(hist)
-    anomalous_hist[mask] = 0
-    return (anomalous_hist, paramdict)
+def dead_rectangle(hists, **kwargs):
+    (mask, paramdict) = rectangle_mask((hists.shape[1],hists.shape[2]), **kwargs)
+    anomalous_hists = np.copy(hists)
+    anomalous_hists[:,mask] = 0
+    return (anomalous_hists, paramdict)
 
-def dead_sector(hist, **kwargs):
-    (mask, paramdict) = sector_mask(hist.shape, **kwargs)
-    anomalous_hist = np.copy(hist)
-    anomalous_hist[mask] = 0
-    return (anomalous_hist, paramdict)
+def dead_sector(hists, **kwargs):
+    (mask, paramdict) = sector_mask((hists.shape[1],hists.shape[2]), **kwargs)
+    anomalous_hists = np.copy(hists)
+    anomalous_hists[:,mask] = 0
+    return (anomalous_hists, paramdict)
 
 def hot_pixel():
     pass
 
-def hot_rectangle(hist, hotfactor=5, **kwargs):
-    (mask, paramdict) = rectangle_mask(hist.shape, **kwargs)
-    anomalous_hist = np.copy(hist)
-    anomalous_hist[mask] = hotfactor*anomalous_hist[mask]
-    return (anomalous_hist, paramdict)
+def hot_rectangle(hists, hotfactor=5, **kwargs):
+    (mask, paramdict) = rectangle_mask((hists.shape[1],hists.shape[2]), **kwargs)
+    anomalous_hists = np.copy(hists)
+    anomalous_hists[:,mask] = hotfactor*anomalous_hists[:,mask]
+    return (anomalous_hists, paramdict)
 
-def hot_sector(hist, hotfactor=5, **kwargs):
-    (mask, paramdict) = sector_mask(hist.shape, **kwargs)
-    anomalous_hist = np.copy(hist)
-    anomalous_hist[mask] = hotfactor*anomalous_hist[mask]
-    return (anomalous_hist, paramdict)
+def hot_sector(hists, hotfactor=5, **kwargs):
+    (mask, paramdict) = sector_mask((hists.shape[1],hists.shape[2]), **kwargs)
+    anomalous_hists = np.copy(hists)
+    anomalous_hists[:,mask] = hotfactor*anomalous_hists[:,mask]
+    return (anomalous_hists, paramdict)
