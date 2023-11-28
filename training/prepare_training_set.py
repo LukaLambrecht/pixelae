@@ -6,6 +6,10 @@ import pandas as pd
 sys.path.append('../')
 from training.patternfiltering import contains_any_pattern
 
+import matplotlib.pyplot as plt
+sys.path.append('../')
+from plotting.plottools import plot_histogram
+
 
 def prepare_training_data_from_file( 
     parquet_file,
@@ -52,6 +56,8 @@ def prepare_training_data_from_file(
     mask_so_far = np.ones(nhists).astype(bool)
     for mask in masks: mask_so_far = (mask_so_far & mask)
     shape_mask = (np.sum(hists[mask_so_far]==0, axis=0)>nhists/2.)
+    
+    plot_histogram(shape_mask)
     
     # filter on required patterns
     if required_patterns is not None:
