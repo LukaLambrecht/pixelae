@@ -326,7 +326,8 @@ def plot_anomalous(histlist, ls, highlight=-1, hrange=-1):
 def plot_hist_2d(hist, fig=None, ax=None, title=None, titlesize=None,
                 xaxtitle=None, xaxtitlesize=None, yaxtitle=None, yaxtitlesize=None,
                 ticklabelsize=None, colorticklabelsize=None, extent=None, caxrange=None,
-                docolorbar=True, origin='lower'):
+                docolorbar=True, caxtitle=None, caxtitlesize=None, caxtitleoffset=None,
+                 origin='lower'):
     ### plot a 2D histogram
     # - hist is a 2D numpy array of shape (nxbins, nybins)
     # notes:
@@ -376,6 +377,8 @@ def plot_hist_2d(hist, fig=None, ax=None, title=None, titlesize=None,
         fraction *= aspect_ratio
         pad *= aspect_ratio
         cbar = fig.colorbar(cobject, ax=ax, fraction=fraction, pad=pad)
+        if caxtitleoffset is not None: cbar.ax.get_yaxis().labelpad = caxtitleoffset
+        if caxtitle is not None: cbar.ax.set_ylabel(caxtitle, fontsize=caxtitlesize, rotation=270)
     
     # add titles
     if ticklabelsize is not None: ax.tick_params(labelsize=ticklabelsize)
