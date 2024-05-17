@@ -9,6 +9,8 @@
 
 # ignore all temporary job files
 **cjob_**
+data/temp_*
+datadials/temp_*
 
 # ignore all numpy files
 **.npy
@@ -19,3 +21,6 @@
 # ingore all plot and output folders
 **plots_**
 **output_**
+
+# ignore dials cache
+datadials/.cache/
