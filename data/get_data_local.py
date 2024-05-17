@@ -12,20 +12,20 @@ import numpy as np
 import argparse
 import ROOT
 # local imports (python3 version)
-#sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
-#from dqmio.src.DQMIOReader import DQMIOReader
-#import dqmio.src.tools as dqmiotools
-#import jobsubmission.condortools as ct
-#CMSSW = os.path.abspath('../../CMSSW_12_4_6')
-#PYTHON_EXE = 'python3'
+sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
+from dqmio.src.DQMIOReader import DQMIOReader
+import dqmio.src.tools as dqmiotools
+import jobsubmission.condortools as ct
+CMSSW = os.path.abspath('../../CMSSW_14_0_4')
+PYTHON_EXE = 'python3'
 # local imports (python2 version)
-sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/dqmio/src'))
-from DQMIOReader import DQMIOReader
-import tools as dqmiotools
-sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/jobsubmission'))
-import condortools as ct
-CMSSW = os.path.abspath('../../CMSSW_10_6_29')
-PYTHON_EXE = 'python'
+#sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/dqmio/src'))
+#from DQMIOReader import DQMIOReader
+#import tools as dqmiotools
+#sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/jobsubmission'))
+#import condortools as ct
+#CMSSW = os.path.abspath('../../CMSSW_10_6_29')
+#PYTHON_EXE = 'python'
 
 
 def get_all_root_files(directory):

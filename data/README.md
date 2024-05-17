@@ -64,3 +64,14 @@ See DAS: part of the dataset is not available on both tape and disk.
 However, this missing fraction corresponds to Run2023C-PromptReco-v3
 (which was overlapping with the end part of Run2023C-PromptReco-v2 according to DAS),
 so overall conclusion is that the data in the parquet files is complete and non-overlapping.
+
+### Update for 2024 data
+We perform a new iteration of the study (with more appropriate MEs) with early 2024 data.
+At the time of writing, the following datasets are available on DAS:
+- `/ZeroBias/Run2024B-PromptReco-v1/DQMIO` (34 GB, 156 files)
+- `/ZeroBias/Run2024C-PromptReco-v1/DQMIO` (102 GB, 438 files)
+- `/ZeroBias/Run2024D-PromptReco-v1/DQMIO` (86 GB, 371 files)
+We do not include era 2024A, as the new MEs were only included by the end of that era.
+Because of the relatively small dataset size, we do not use rucio transfers this time,
+but directly copy the datasets to a local location using [this tool](https://github.com/LukaLambrecht/ML4DQMDC-PixelAE/blob/master/dqmio/copydastolocal/copy_das_to_local_set.py).
+The remaining steps are similar to the above for the 2023 iteration.

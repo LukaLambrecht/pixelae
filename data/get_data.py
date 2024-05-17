@@ -67,11 +67,11 @@ if __name__=='__main__':
   if args.proxy is not None: dqmiotools.export_proxy( args.proxy )
 
   # make a list of input files
-  filemode = 'das'
-  if os.path.exists(args.datasetname): filemode = 'local'
+  location = 'das'
+  if os.path.exists(args.datasetname): location = 'local'
   inputfiles = dqmiotools.format_input_files( 
                  args.datasetname,
-                 filemode=filemode,
+                 location=location,
                  redirector=args.redirector,
                  istest=args.test )
 

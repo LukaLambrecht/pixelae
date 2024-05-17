@@ -9,15 +9,15 @@ import os
 import json
 import argparse
 # local imports (python3 version)
-#sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
-#import jobsubmission.condortools as ct
-#CMSSW = os.path.abspath('../../CMSSW_12_4_6')
-#PYTHON_EXE = 'python3'
+sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
+import jobsubmission.condortools as ct
+CMSSW = os.path.abspath('../../CMSSW_14_0_4')
+PYTHON_EXE = 'python3'
 # local imports (python2 version)
-sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/jobsubmission'))
-import condortools as ct
-CMSSW = os.path.abspath('../../CMSSW_10_6_29')
-PYTHON_EXE = 'python'
+#sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/jobsubmission'))
+#import condortools as ct
+#CMSSW = os.path.abspath('../../CMSSW_10_6_29')
+#PYTHON_EXE = 'python'
 
 
 if __name__=='__main__':
