@@ -25,7 +25,7 @@ def residual_block_dec(x, filter_number, kernel_size, strides=1, endactivation=N
     return out
 
 
-def model_mwe_alldisks( input_shape ):
+def model_clusterposition_pxdisks_mwe( input_shape ):
     # minimal working example that works relatively well on all disks, november 23 2023
     input_layer = Input(shape=input_shape)
     
@@ -43,27 +43,6 @@ def model_mwe_alldisks( input_shape ):
     resnet_layer = residual_block_dec(resnet_layer, 32, 3, strides=1, padding="same")
     resnet_layer = residual_block_dec(resnet_layer, 32, 3, strides=2, padding="same")
     resnet_layer = residual_block_dec(resnet_layer, 16, 3, strides=1, padding="same")
-    resnet_layer = residual_block_dec(resnet_layer, 16, 3, strides=2, padding="same")
-    resnet_layer = UpSampling2D((2, 2))(resnet_layer)
-    output_layer = Conv2DTranspose(1, 3, strides=1, padding="same")(resnet_layer)
-    
-    # model
-    resnet_model = Model(inputs = [input_layer], outputs = [output_layer])
-    resnet_model.compile(loss="mse", optimizer="adam")
-    return resnet_model
-
-def model_mwe_pxdiskplus1( input_shape ):
-    # minimal working example that works well on PXDisk+1, november 15 2023
-    input_layer = Input(shape=input_shape)
-    
-    # encoder
-    resnet_layer = Conv2D(16, 3, strides=1, padding="same")(input_layer)
-    resnet_layer = MaxPooling2D((2,2))(resnet_layer)
-    resnet_layer = residual_block_enc(resnet_layer, 16, 3, strides=2, padding="same")
-    resnet_layer = residual_block_enc(resnet_layer, 32, 3, strides=2, padding="same")
-    
-    # decoder
-    resnet_layer = residual_block_dec(resnet_layer, 32, 3, strides=2, padding="same")
     resnet_layer = residual_block_dec(resnet_layer, 16, 3, strides=2, padding="same")
     resnet_layer = UpSampling2D((2, 2))(resnet_layer)
     output_layer = Conv2DTranspose(1, 3, strides=1, padding="same")(resnet_layer)
