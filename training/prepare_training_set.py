@@ -11,17 +11,14 @@ sys.path.append('../')
 from plotting.plottools import plot_histogram
 
 
-def prepare_training_data_from_file( 
-    parquet_file,
+def prepare_training_data_from_df( 
+    df,
     verbose=False,
     entries_threshold=None,
     skip_first_lumisections=None,
     required_patterns=None,
     veto_patterns=None ):
     
-    # read the dataframe and get histograms
-    if verbose: print('Loading file {}'.format(parquet_file))
-    df = pd.read_parquet(parquet_file)
     nhists = len(df)
     xbins = df['Xbins'][0]
     ybins = df['Ybins'][0]
@@ -88,6 +85,12 @@ def prepare_training_data_from_file(
     
     # return histograms and lumis
     return (training_data, training_runs, training_lumis)
+
+def prepare_training_data_from_file( parquet_file, verbose=False, **kwargs ):
+    if verbose: print('Loading file {}'.format(parquet_file))
+    df = pd.read_parquet(parquet_file)
+    res = prepare_training_data_from_df(df, verbose=verbose, **kwargs)
+    return res
 
 def prepare_training_data_from_files( parquet_files, verbose=False, **kwargs ):
     res = [prepare_training_data_from_file(f, verbose=verbose, **kwargs) for f in parquet_files]
