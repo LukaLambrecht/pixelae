@@ -323,7 +323,7 @@ def plot_anomalous(histlist, ls, highlight=-1, hrange=-1):
 # functions for plotting 2D histograms #
 ########################################
 
-def plot_hist_2d(hist, fig=None, ax=None, title=None, titlesize=None,
+def plot_hist_2d(hist, fig=None, ax=None, figsize=None, title=None, titlesize=None,
                 xaxtitle=None, xaxtitlesize=None, yaxtitle=None, yaxtitlesize=None,
                 ticklabelsize=None, colorticklabelsize=None, extent=None, caxrange=None,
                 docolorbar=True, caxtitle=None, caxtitlesize=None, caxtitleoffset=None,
@@ -338,7 +338,7 @@ def plot_hist_2d(hist, fig=None, ax=None, title=None, titlesize=None,
     #   (i.e. the first axis is the y-axis instead of the x-axis),
     #   and to have the y-axis pointing downwards;
     #   both effects are fixed by transposing the array and using the 'lower' origin keyword.
-    if fig is None or ax is None: fig,ax = plt.subplots()
+    if fig is None or ax is None: fig,ax = plt.subplots(figsize=figsize)
     
     # settings
     histmin = np.amin(hist)

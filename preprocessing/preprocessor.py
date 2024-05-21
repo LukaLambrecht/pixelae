@@ -19,6 +19,7 @@ class PreProcessor(object):
     
     def __init__(self,
                  crop=None, # a tuple of slices (xdim and ydim)
+                 anticrop=None, # a tuple of slices (xdim and ydim), opposite of crop
                  time_average_radii=None, # dict of inner radii to number of time averages
                  rebin_target=None, # target shape for rebinning
                  omsjson=None, # json file or object with oms data
@@ -26,6 +27,7 @@ class PreProcessor(object):
                  spatial_normalization=None, # histogram for spatial normalization
                 ):
         self.crop = crop
+        self.anticrop = anticrop
         self.time_average_radii = time_average_radii
         self.rebin_target = rebin_target
         self.omsjson = omsjson
@@ -42,6 +44,7 @@ class PreProcessor(object):
         # useful for documenting and keeping track what preprocessing was used
         res = 'PreProcessor instance with following attributes:\n'
         res += ' - crop: {}\n'.format(self.crop)
+        res += ' - anticrop: {}\n'.format(self.anticrop)
         res += ' - time_average_radii: {}\n'.format(self.time_average_radii)
         res += ' - rebin_target: {}\n'.format(self.rebin_target)
         omsjson_str = self.omsjson
@@ -63,6 +66,13 @@ class PreProcessor(object):
             slicex = self.crop[0]
             slicey = self.crop[1]
             histograms = histograms[:, slicex, slicey]
+            
+        # anti-cropping
+        if self.anticrop is not None:
+            slicex = self.anticrop[0]
+            slicey = self.anticrop[1]
+            histograms = np.delete(histograms, slicex, axis=1)
+            histograms = np.delete(histograms, slicey, axis=2)
             
         # average the outer part of the disk over some time steps
         if self.time_average_radii is not None:
