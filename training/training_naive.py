@@ -15,9 +15,6 @@ import pandas as pd
 sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE/jobsubmission'))
 import condortools as ct
 CMSSW = os.path.abspath('../../CMSSW_12_4_6')
-# framework modules
-sys.path.append('../')
-from models.modeldefs import model_mwe_alldisks
 # local modules
 from prepare_training_set import prepare_training_data_from_files
 
@@ -28,6 +25,7 @@ if __name__=='__main__':
   parser = argparse.ArgumentParser(description='Train model')
   parser.add_argument('-i', '--inputfiles', required=True, nargs='+')
   parser.add_argument('-o', '--outputfile', required=True)
+  parser.add_argument('-m', '--modelfile', required=True)
   parser.add_argument('--entries_threshold', default=0, type=int)
   parser.add_argument('--skip_first_lumisections', default=0, type=int)
   parser.add_argument('--veto_patterns', default=0, type=int)
@@ -51,9 +49,10 @@ if __name__=='__main__':
     cmd = 'python3 training_naive.py'
     cmd += ' -i {}'.format(' '.join(args.inputfiles))
     cmd += ' -o {}'.format(args.outputfile)
+    cmd += ' -m {}'.format(args.modelfile)
     cmd += ' --runmode local'
     for arg in vars(args):
-      if arg in ['inputfiles', 'outputfile', 'runmode']: continue
+      if arg in ['inputfiles', 'outputfile', 'modelfile', 'runmode']: continue
       cmd += ' --{} {}'.format(arg, getattr(args, arg))
     ct.submitCommandAsCondorJob('cjob_training_naive', cmd,
       cmssw_version=CMSSW, home='auto')
@@ -76,8 +75,7 @@ if __name__=='__main__':
   shape_mask = (np.sum(training_data[:,:,:,0]==0, axis=0)>len(training_data)/2.)
 
   # initialize model
-  input_shape = training_data.shape[1:]
-  model = model_mwe_alldisks(input_shape)
+  model = keras.models.load_model(args.modelfile)
   model.compile(loss=args.loss, optimizer=args.optimizer)
 
   # define callbacks

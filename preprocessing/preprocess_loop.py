@@ -26,6 +26,9 @@ def get_oms_file(parquetfile):
   if fnmatch(parquetfile, '*Run2023D-*-v2-*'): return 'omsdata/omsdata_Run2023D-v2.json'
   if fnmatch(parquetfile, '*Run2023E-*-v1-*'): return 'omsdata/omsdata_Run2023E.json'
   if fnmatch(parquetfile, '*Run2023F-*-v1-*'): return 'omsdata/omsdata_Run2023F.json'
+  if fnmatch(parquetfile, '*Run2024B-*-v1-*'): return 'omsdata/omsdata_Run2024B-v1.json'
+  if fnmatch(parquetfile, '*Run2024C-*-v1-*'): return 'omsdata/omsdata_Run2024C-v1.json'
+  if fnmatch(parquetfile, '*Run2024D-*-v1-*'): return 'omsdata/omsdata_Run2024D-v1.json'  
   raise Exception('No suitable OMS file found for input file {}'.format(parquetfile))
 
 

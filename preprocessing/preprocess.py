@@ -22,6 +22,29 @@ CMSSW = os.path.abspath('../../CMSSW_12_4_6')
 from preprocessor import PreProcessor
 
 
+def get_crop(mename):
+  if 'clusterposition_zphi' in mename: return None
+  elif 'clusterposition_xy' in mename: return (slice(20,180), slice(19,179))
+  elif '_per_SignedModuleCoord_per_SignedLadderCoord_' in mename: return None
+  elif '_per_SignedDiskCoord_per_SignedBladePanelCoord_' in mename: return None
+  else:
+    msg = 'ERROR: ME {} not recognized.'.format(mename)
+    raise Exception(msg)
+
+def get_anticrop(mename):
+  if 'clusterposition_zphi' in mename: return None
+  elif 'clusterposition_xy' in mename: return None
+  elif '_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_1' in mename: return (slice(32,40), slice(12,14))
+  elif '_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_2' in mename: return (slice(32,40), slice(28,30))
+  elif '_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_3' in mename: return (slice(32,40), slice(44,46))
+  elif '_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_4' in mename: return (slice(32,40), slice(64,66))
+  elif '_per_SignedDiskCoord_per_SignedBladePanelCoord_PXRing_1' in mename: return (slice(24,32), slice(44,48))
+  elif '_per_SignedDiskCoord_per_SignedBladePanelCoord_PXRing_2' in mename: return (slice(24,32), slice(68,72))
+  else:
+    msg = 'ERROR: ME {} not recognized.'.format(mename)
+    raise Exception(msg)
+
+
 if __name__=='__main__':
 
   # read arguments
@@ -57,9 +80,10 @@ if __name__=='__main__':
 
   # define a PreProcessor
   prep = PreProcessor(
-    crop=(slice(20,180), slice(19,179)),
-    time_average_radii={0: 2, 50:5},
-    rebin_target=(32,32),
+    crop = get_crop(args.inputfile),
+    anticrop = get_anticrop(args.inputfile),
+    #time_average_radii={0:2, 50:5},
+    #rebin_target=(20,20),
     omsjson=args.omsfile,
     oms_normalization_attr='pileup'
   )
