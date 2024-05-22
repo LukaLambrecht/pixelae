@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 
+
 # Get data with DIALS API
-# Note: not sure how authentication is handled in job submission,
-#       but it seems to work automagically if the credentials are already cached.
-#       So first run a small test locally to do the authentication,
-#       then jobs can be submitted without issues.
 
 
 # general imports
@@ -24,18 +21,68 @@ from cmsdials.filters import LumisectionHistogram2DFilters
 from cmsdials.filters import RunFilters
 
 # local imports
-sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
+sys.path.append(os.path.abspath('../'))
 import jobsubmission.condortools as ct
 CMSSW = os.path.abspath('../../CMSSW_14_0_4')
+
+
+def get_creds(max_attempts=5):
+  ### get dials credentials
+  # the credential retrieval is essentially just a call to
+  # Credentials.from_creds_file() (from the cmsdials api),
+  # but wrapped in a while-try-except block,
+  # to catch potential transient errors.
+  authenticated = False
+  auth_attempt_counter = 0
+  while (auth_attempt_counter<max_attempts and not authenticated):
+    auth_attempt_counter += 1
+    print('Retrieving cmsdials credentials from cache...')
+    try:
+      creds = Credentials.from_creds_file()
+      authenticated = True
+    except: continue
+  if not authenticated:
+    # try one more time to trigger the original error again
+    creds = Credentials.from_creds_file()
+  sys.stdout.flush()
+  sys.stderr.flush()
+  return creds
+
+def get_data(filters, max_attempts=5, max_pages=None):
+  ### get dials data
+  # the data retrieval is essentially just a call to
+  # h2d.list_all (from the cmsdials api),
+  # but wrapped in a while-try-except block,
+  # to catch potential transient errors.
+  # todo: extend to other data types than h2d
+  data_retrieved = False
+  attempt_counter = 0
+  while (attempt_counter<max_attempts and not data_retrieved):
+    attempt_counter += 1
+    try:
+      data = dials.h2d.list_all(filters, max_pages=max_pages, progress_bar=False)
+      data_retrieved = True
+    except: continue
+  if not data_retrieved:
+    # try one more time to trigger the original error
+    data = dials.h2d.list_all(filters, max_pages=max_pages, progress_bar=False)
+  sys.stdout.flush()
+  sys.stderr.flush()
+  return data
 
 
 if __name__=='__main__':
 
   # read arguments
   parser = argparse.ArgumentParser(description='Get data')
-  parser.add_argument('-d', '--datasetnames', required=True)
-  parser.add_argument('-m', '--menames', required=True)
-  parser.add_argument('-o', '--outputdir', default='.')
+  parser.add_argument('-d', '--datasetnames', required=True,
+    help='Path to a json file containing a list of dataset names,'
+        +' may contain regex-style metacharacters or sets.')
+  parser.add_argument('-m', '--menames', required=True,
+    help='Path to a json file containing a list of monitoring elements,'
+        +' may contain regex-style metacharacters or sets.')
+  parser.add_argument('-o', '--outputdir', default='.',
+    help='Directory to store output parquet files into.')
   parser.add_argument('--runmode', default='local', choices=['local', 'condor'])
   parser.add_argument('--test', default=False, action='store_true')
   args = parser.parse_args()
@@ -61,82 +108,66 @@ if __name__=='__main__':
   sys.stderr.write('###starting###\n')
   sys.stderr.flush()
 
+  # make a list of datasets
+  datasets = []
+  print('Reading {}...'.format(args.datasetnames))
+  with open(args.datasetnames, 'r') as f:
+    datasets = json.load(f)
+  print('Found following datasets:')
+  for dataset in datasets: print('  - {}'.format(dataset))
+
+  # make a list of monitoring elements
+  mes = []
+  print('Reading {}...'.format(args.menames))
+  with open(args.menames, 'r') as f:
+    mes = json.load(f)
+  print('Found following MEs:')
+  for me in mes: print('  - {}'.format(me))
+
   # do authentication
-  # (wrap in while-try-except block because of observed apparently random json errors)
-  authenticated = False
-  auth_attempt_counter = 0
-  while (auth_attempt_counter<5 and not authenticated):
-    auth_attempt_counter += 1
-    print('Retrieving cmsdials credentials from cache...')
-    try:
-      creds = Credentials.from_creds_file()
-      authenticated = True
-    except: continue
-  if not authenticated:
-    # try one more time to trigger the original error again
-    creds = Credentials.from_creds_file()
-  sys.stdout.flush()
-  sys.stderr.flush()
+  creds = get_creds()
 
   # create Dials object
   dials = Dials(creds, workspace='tracker')
 
-  # make a list of datasets
-  datasets = []
-  with open(args.datasetnames, 'r') as f:
-    datasets = json.load(f)
-
-  # make a list of monitoring elements
-  mes = []
-  with open(args.menames, 'r') as f:
-    mes = json.load(f)
-
   # loop over datasets
-  for dataset in datasets:
-    print('Now running on dataset {}...'.format(dataset))
+  for datasetidx,dataset in enumerate(datasets):
+    print('Now running on dataset {} ({}/{})'.format(dataset, datasetidx+1, len(datasets)))
     sys.stdout.flush()
     sys.stderr.flush()
 
     # retrieve run numbers
-    # note: this is needed in an attempt to solve timeout errors;
-    #       make separate calls per run instead of one giant call for a full dataset
-    runfilters = RunFilters(dataset=dataset)
-    runs = dials.run.list_all(runfilters).results
+    # note: this is done to make separate calls per run 
+    #       instead of one giant call for a full dataset
+    runfilters = RunFilters(dataset__regex=dataset)
+    runs = dials.run.list_all(runfilters, progress_bar=False).results
     runs = sorted([el.run_number for el in runs])
     print('Found {} runs'.format(len(runs)))
 
     # loop over mes
-    for me in mes:
-      print('Now running ME {}'.format(me))
+    for meidx,me in enumerate(mes):
+      print('Now running ME {} ({}/{})'.format(me, meidx+1, len(mes)))
       sys.stdout.flush()
       sys.stderr.flush()
       dfs = []
 
       # loop over runs
-      for run in runs:
+      for runidx,run in enumerate(runs):
+        print('  - Run {} ({}/{})'.format(run, runidx+1, len(runs)))
+        sys.stdout.flush()
+        sys.stderr.flush()
 
         # define filter
         h2dfilters = LumisectionHistogram2DFilters(
-          dataset = dataset,
-          me = me,
+          dataset__regex = dataset,
+          me__regex = me,
           run_number = run
         )
         max_pages = None
         if args.test: max_pages = 1
 
         # make the dials request
-        # (wrap in while-try-except block in an attempt to solve timeout and other errors)
-        data_retrieved = False
-        attempt_counter = 0
-        while (attempt_counter<5 and not data_retrieved):
-          attempt_counter += 1
-          try:
-            data = dials.h2d.list_all(h2dfilters, max_pages=max_pages)
-            data_retrieved = True
-          except: continue
-        if not data_retrieved:
-          # try one more time to trigger the original error
-          data = dials.h2d.list_all(h2dfilters, max_pages=max_pages)  
+        data = get_data(h2dfilters, max_pages=max_pages)
 
         # convert to dataframe
         df = data.to_pandas()
@@ -145,12 +176,25 @@ if __name__=='__main__':
       # concatenate results for all runs
       df = pd.concat(dfs, ignore_index=True)
 
-      # write to output file
-      print('Writing output file...')
+      # check if the dataframe contains multiple datasets and/or MEs
+      # (can occur if the provided dataset/ME name is a regular expression),
+      # and if so, split into one dataframe per dataset and ME.
+      dfdict = {}
+      datasetnames = list(set(df['dataset']))
+      menames = list(set(df['me']))
+      for datasetname in datasetnames:
+        dfdict[datasetname] = {}
+        for mename in menames:
+          dfdict[datasetname][mename] = df[(df['me']==mename) & (df['dataset']==datasetname)]
+
+      # write to output file(s)
+      print('Writing output file(s)...')
       if not os.path.exists(args.outputdir): os.makedirs(args.outputdir)
-      outputfile = (dataset+'-'+me).strip('/').replace('/','-')+'.parquet'
-      outputfile = os.path.join(args.outputdir, outputfile)
-      df.to_parquet(outputfile)
+      for datasetname in dfdict.keys():
+        for mename in dfdict[datasetname].keys():
+          outputfile = (datasetname+'-'+mename).strip('/').replace('/','-')+'.parquet'
+          outputfile = os.path.join(args.outputdir, outputfile)
+          dfdict[datasetname][mename].to_parquet(outputfile)
 
   # print finishing tag (for job completion checking)
   sys.stderr.write('###done###\n')

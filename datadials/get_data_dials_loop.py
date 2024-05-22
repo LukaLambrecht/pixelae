@@ -9,7 +9,7 @@ import sys
 import json
 import argparse
 # local imports
-sys.path.append(os.path.abspath('../../ML4DQMDC-PixelAE'))
+sys.path.append(os.path.abspath('../'))
 import jobsubmission.condortools as ct
 CMSSW = os.path.abspath('../../CMSSW_14_0_4')
 
@@ -73,7 +73,7 @@ if __name__=='__main__':
       cmd += ' -d {}'.format(datasetfile)
       cmd += ' -m {}'.format(mefile)
       cmd += ' -o {}'.format(args.outputdir)
-      #if args.test: cmd += ' --test'
+      if args.test: cmd += ' --test'
       cmd += ' --runmode local'
       cmds.append(cmd)
 
