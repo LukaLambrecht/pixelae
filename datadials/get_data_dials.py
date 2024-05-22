@@ -62,7 +62,21 @@ if __name__=='__main__':
   sys.stderr.flush()
 
   # do authentication
-  creds = Credentials.from_creds_file()
+  # (wrap in while-try-except block because of observed apparently random json errors)
+  authenticated = False
+  auth_attempt_counter = 0
+  while (auth_attempt_counter<5 and not authenticated):
+    auth_attempt_counter += 1
+    print('Retrieving cmsdials credentials from cache...')
+    try:
+      creds = Credentials.from_creds_file()
+      authenticated = True
+    except: continue
+  if not authenticated:
+    # try one more time to trigger the original error again
+    creds = Credentials.from_creds_file()
+  sys.stdout.flush()
+  sys.stderr.flush()
 
   # create Dials object
   dials = Dials(creds, workspace='tracker')
@@ -79,7 +93,9 @@ if __name__=='__main__':
 
   # loop over datasets
   for dataset in datasets:
-    print('Now running on dataset {}'.format(dataset))
+    print('Now running on dataset {}...'.format(dataset))
+    sys.stdout.flush()
+    sys.stderr.flush()
 
     # retrieve run numbers
     # note: this is needed in an attempt to solve timeout errors;
@@ -92,6 +108,8 @@ if __name__=='__main__':
     # loop over mes
     for me in mes:
       print('Now running ME {}'.format(me))
+      sys.stdout.flush()
+      sys.stderr.flush()
       dfs = []
 
       # loop over runs
@@ -107,7 +125,18 @@ if __name__=='__main__':
         if args.test: max_pages = 1
 
         # make the dials request
-        data = dials.h2d.list_all(h2dfilters, max_pages=max_pages)
+        # (wrap in while-try-except block in an attempt to solve timeout and other errors)
+        data_retrieved = False
+        attempt_counter = 0
+        while (attempt_counter<5 and not data_retrieved):
+          attempt_counter += 1
+          try:
+            data = dials.h2d.list_all(h2dfilters, max_pages=max_pages)
+            data_retrieved = True
+          except: continue
+        if not data_retrieved:
+          # try one more time to trigger the original error
+          data = dials.h2d.list_all(h2dfilters, max_pages=max_pages)  
 
         # convert to dataframe
         df = data.to_pandas()

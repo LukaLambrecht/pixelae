@@ -73,7 +73,7 @@ if __name__=='__main__':
       cmd += ' -d {}'.format(datasetfile)
       cmd += ' -m {}'.format(mefile)
       cmd += ' -o {}'.format(args.outputdir)
-      if args.test: cmd += ' --test'
+      #if args.test: cmd += ' --test'
       cmd += ' --runmode local'
       cmds.append(cmd)
 
