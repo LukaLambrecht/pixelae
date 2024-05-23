@@ -6,6 +6,7 @@
 # imports
 import os
 import sys
+import six
 import json
 import argparse
 # local imports
@@ -18,13 +19,28 @@ if __name__=='__main__':
 
   # read arguments
   parser = argparse.ArgumentParser(description='Get data')
-  parser.add_argument('-d', '--datasets', required=True)
-  parser.add_argument('-m', '--menames', required=True)
-  parser.add_argument('-o', '--outputdir', default='.')
-  parser.add_argument('--splitdatasets', default=False, action='store_true')
-  parser.add_argument('--splitmes', default=False, action='store_true')
-  parser.add_argument('--runmode', default='local', choices=['local', 'condor'])
-  parser.add_argument('--test', default=False, action='store_true')
+  parser.add_argument('-d', '--datasetnames', required=True,
+    help='Path to a json file containing a list of dataset names,'
+        +' may contain regex-style metacharacters or sets.')
+  parser.add_argument('-m', '--menames', required=True,
+    help='Path to a json file containing a list of monitoring elements,'
+        +' may contain regex-style metacharacters or sets.')
+  parser.add_argument('-o', '--outputdir', default='.',
+    help='Directory to store output parquet files into.')
+  parser.add_argument('--splitdatasets', default=False, action='store_true',
+    help='Submit separate jobs for each dataset in the provided list.'
+        +' Note: lines with regex-expressions are kept in a single job.')
+  parser.add_argument('--splitmes', default=False, action='store_true',
+    help='Submit separate jobs for each monitoring element in the provided list'
+        +' Note: lines with regex-expressions are kept in a single job.')
+  parser.add_argument('--resubmit', default=False, action='store_true',
+    help='Submit only jobs for output files that are not yet present in the output directory'
+        +' (can be used if a small fraction of jobs failed because of transient errors).'
+        +' Note: lines with regex-expressions will be resubmitted regardless.')
+  parser.add_argument('--runmode', default='local', choices=['local', 'condor'],
+    help='Run directly in terminal ("local") or in HTCondor job ("condor").')
+  parser.add_argument('--test', default=False, action='store_true',
+    help='Truncate loop and data for small and quick tests.')
   args = parser.parse_args()
   
   # print arguments
@@ -34,7 +50,7 @@ if __name__=='__main__':
 
   # make a list of datasets
   datasets = []
-  with open(args.datasets, 'r') as f:
+  with open(args.datasetnames, 'r') as f:
     datasets = json.load(f)
 
   # make a list of monitoring elements
@@ -43,7 +59,7 @@ if __name__=='__main__':
     menames = json.load(f)
 
   # handle splitting per dataset
-  datasetfiles = [args.datasets]
+  datasetfiles = [args.datasetnames]
   if args.splitdatasets:
     datasetfiles = []
     for i,dataset in enumerate(datasets):
@@ -65,14 +81,41 @@ if __name__=='__main__':
   # make output directory
   if not os.path.exists(args.outputdir): os.makedirs(args.outputdir)
 
+  # check which output files are already present
+  # to skip the corresponding jobs (if requested)
+  # note: depends on naming convention in get_data_dials.py!
+  # note: only relevant here if splitdatasets and splitmes are true,
+  #       else just need to pass down to get_data_dials.py
+  existing_output_files = []
+  veto_jobs = []
+  if( args.splitdatasets and args.splitmes and args.resubmit ):
+    keep_jobs = []
+    for dataset, datasetfile in zip(datasets,datasetfiles):
+      for me, mefile in zip(menames, mefiles):
+        outputfile = (dataset+'-'+me).strip('/').replace('/','-')+'.parquet'
+        outputfile = os.path.join(args.outputdir, outputfile)
+        if os.path.exists(outputfile):
+          existing_output_files.append(outputfile)
+          veto_jobs.append((datasetfile,mefile))
+        else: keep_jobs.append((dataset,me))
+    print('Note: the following output files already exist ({}):'.format(len(existing_output_files)))
+    for f in sorted(existing_output_files): print('  - {}'.format(f))
+    print('Will submit only the remaining jobs ({}):'.format(len(keep_jobs)))
+    for (dataset,me) in keep_jobs: print('  - {} / {}'.format(dataset,me))
+    print('Continue? (y/n)')
+    go = six.moves.input()
+    if not go=='y': sys.exit()
+
   # loop over datasets and monitoring elements
   cmds = []
   for datasetfile in datasetfiles:
     for mefile in mefiles:
+      if (datasetfile,mefile) in veto_jobs: continue
       cmd = 'python3 get_data_dials.py'
       cmd += ' -d {}'.format(datasetfile)
       cmd += ' -m {}'.format(mefile)
       cmd += ' -o {}'.format(args.outputdir)
+      if args.resubmit: cmd += ' --resubmit'
       if args.test: cmd += ' --test'
       cmd += ' --runmode local'
       cmds.append(cmd)

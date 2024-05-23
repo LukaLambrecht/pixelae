@@ -83,8 +83,14 @@ if __name__=='__main__':
         +' may contain regex-style metacharacters or sets.')
   parser.add_argument('-o', '--outputdir', default='.',
     help='Directory to store output parquet files into.')
-  parser.add_argument('--runmode', default='local', choices=['local', 'condor'])
-  parser.add_argument('--test', default=False, action='store_true')
+  parser.add_argument('--resubmit', default=False, action='store_true',
+    help='Only make output files that are not yet present in the output directory'
+        +' (can be used if a small fraction of jobs failed because of transient errors).'
+        +' Note: lines with regex-expressions will be used regardless.')
+  parser.add_argument('--runmode', default='local', choices=['local', 'condor'],
+    help='Run directly in terminal ("local") or in HTCondor job ("condor").')
+  parser.add_argument('--test', default=False, action='store_true',
+    help='Truncate data for small and quick tests.')
   args = parser.parse_args()
   
   # print arguments
@@ -98,6 +104,7 @@ if __name__=='__main__':
     cmd += ' -d {}'.format(args.datasetnames)
     cmd += ' -m {}'.format(args.menames)
     cmd += ' -o {}'.format(args.outputdir)
+    if args.resubmit: cmd += ' --resubmit'
     if args.test: cmd += ' --test'
     cmd += ' --runmode local'
     ct.submitCommandAsCondorJob('cjob_get_data', cmd,
@@ -150,6 +157,15 @@ if __name__=='__main__':
       sys.stdout.flush()
       sys.stderr.flush()
       dfs = []
+
+      # check if output file already exists and if so, skip this part
+      # (if requested)
+      if args.resubmit:
+        outputfile = (dataset+'-'+me).strip('/').replace('/','-')+'.parquet'
+        outputfile = os.path.join(args.outputdir, outputfile)
+        if os.path.exists(outputfile):
+          print('Output file {} already exists, skipping this part.'.format(outputfile))
+          continue
 
       # loop over runs
       for runidx,run in enumerate(runs):
