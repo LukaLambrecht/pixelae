@@ -44,8 +44,8 @@ def get_lumis_parquet(pfile):
   ### get lumisections in a parquet file
   # returns:
   # a tuple of equally long numpy arrays: (runs, lumisections)
-  df = pd.read_parquet(pfile, columns=['fromrun', 'fromlumi'])
-  return (np.array(df['fromrun']), np.array(df['fromlumi']))
+  df = pd.read_parquet(pfile, columns=['run_number', 'ls_number'])
+  return (np.array(df['run_number']), np.array(df['ls_number']))
   
   
 if __name__=='__main__':
@@ -108,7 +108,7 @@ if __name__=='__main__':
   allids = np.array([])
   for dataset in datasets:
     parquetfile = dataset_files[dataset.replace('-','').replace('/','')]
-    if len(parquetfile)<1: 
+    if len(parquetfile)<1:
       print('  (Checking dataset {}, found no corresponding files)'.format(dataset))
       continue
     parquetfile = parquetfile[0]
