@@ -153,7 +153,7 @@ if __name__=='__main__':
 
     # loop over mes
     for meidx,me in enumerate(mes):
-      print('Now running ME {} ({}/{})'.format(me, meidx+1, len(mes)))
+      print('Now running on ME {} ({}/{})'.format(me, meidx+1, len(mes)))
       sys.stdout.flush()
       sys.stderr.flush()
       dfs = []
