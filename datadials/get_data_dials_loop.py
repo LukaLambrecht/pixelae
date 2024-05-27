@@ -25,6 +25,12 @@ if __name__=='__main__':
   parser.add_argument('-m', '--menames', required=True,
     help='Path to a json file containing a list of monitoring elements,'
         +' may contain regex-style metacharacters or sets.')
+  parser.add_argument('-t', '--metype', required=True, choices=['h1d', 'h2d'],
+    help='Type of MEs (choose from "h1d" or "h2d"), needed for correct DIALS syntax.'
+        +' Note: --menames json files with mixed 1D and 2D MEs are not supported,'
+        +' they should be splitted and submitted separately.')
+  parser.add_argument('-w', '--workspace', default='tracker',
+    help='DIALS-workspace, see https://github.com/cms-DQM/dials-py?tab=readme-ov-file#workspace')
   parser.add_argument('-o', '--outputdir', default='.',
     help='Directory to store output parquet files into.')
   parser.add_argument('--splitdatasets', default=False, action='store_true',
@@ -114,6 +120,8 @@ if __name__=='__main__':
       cmd = 'python3 get_data_dials.py'
       cmd += ' -d {}'.format(datasetfile)
       cmd += ' -m {}'.format(mefile)
+      cmd += ' -t {}'.format(args.metype)
+      cmd += ' -w {}'.format(args.workspace)
       cmd += ' -o {}'.format(args.outputdir)
       if args.resubmit: cmd += ' --resubmit'
       if args.test: cmd += ' --test'

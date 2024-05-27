@@ -51,21 +51,32 @@ def get_creds(max_attempts=5):
 def get_data(filters, max_attempts=5, max_pages=None):
   ### get dials data
   # the data retrieval is essentially just a call to
-  # h2d.list_all (from the cmsdials api),
+  # h2d.list_all (or similar for h1d, from the cmsdials api),
   # but wrapped in a while-try-except block,
   # to catch potential transient errors.
-  # todo: extend to other data types than h2d
+  
+  # first define correct cmsdials api function
+  # based on the type of filters
+  print(type(filters))
+  if isinstance(filters, LumisectionHistogram1DFilters):
+    dialsfunc = dials.h1d.list_all
+  elif isinstance(filters, LumisectionHistogram2DFilters):
+    dialsfunc = dials.h2d.list_all
+  else:
+    msg = 'ERROR: unrecognized type of DIALS filters: {}'.format(type(filters))
+    raise Exception(msg)
+  # make a wrapped call to cmsdials api
   data_retrieved = False
   attempt_counter = 0
   while (attempt_counter<max_attempts and not data_retrieved):
     attempt_counter += 1
     try:
-      data = dials.h2d.list_all(filters, max_pages=max_pages, progress_bar=False)
+      data = dialsfunc(filters, max_pages=max_pages, progress_bar=False)
       data_retrieved = True
     except: continue
   if not data_retrieved:
     # try one more time to trigger the original error
-    data = dials.h2d.list_all(filters, max_pages=max_pages, progress_bar=False)
+    data = dialsfunc(filters, max_pages=max_pages, progress_bar=False)
   sys.stdout.flush()
   sys.stderr.flush()
   return data
@@ -81,6 +92,12 @@ if __name__=='__main__':
   parser.add_argument('-m', '--menames', required=True,
     help='Path to a json file containing a list of monitoring elements,'
         +' may contain regex-style metacharacters or sets.')
+  parser.add_argument('-t', '--metype', required=True, choices=['h1d', 'h2d'],
+    help='Type of MEs (choose from "h1d" or "h2d"), needed for correct DIALS syntax.'
+        +' Note: --menames json files with mixed 1D and 2D MEs are not supported,'
+        +' they should be splitted and submitted separately.')
+  parser.add_argument('-w', '--workspace', default='tracker',
+    help='DIALS-workspace, see https://github.com/cms-DQM/dials-py?tab=readme-ov-file#workspace')
   parser.add_argument('-o', '--outputdir', default='.',
     help='Directory to store output parquet files into.')
   parser.add_argument('--resubmit', default=False, action='store_true',
@@ -103,6 +120,7 @@ if __name__=='__main__':
     cmd = 'python3 get_data_dials.py'
     cmd += ' -d {}'.format(args.datasetnames)
     cmd += ' -m {}'.format(args.menames)
+    cmd += ' -t {}'.format(args.metype)
     cmd += ' -o {}'.format(args.outputdir)
     if args.resubmit: cmd += ' --resubmit'
     if args.test: cmd += ' --test'
@@ -135,7 +153,7 @@ if __name__=='__main__':
   creds = get_creds()
 
   # create Dials object
-  dials = Dials(creds, workspace='tracker')
+  dials = Dials(creds, workspace=args.workspace)
 
   # loop over datasets
   for datasetidx,dataset in enumerate(datasets):
@@ -174,16 +192,26 @@ if __name__=='__main__':
         sys.stderr.flush()
 
         # define filter
-        h2dfilters = LumisectionHistogram2DFilters(
-          dataset__regex = dataset,
-          me__regex = me,
-          run_number = run
-        )
+        if args.metype=='h1d':
+          dialsfilters = LumisectionHistogram1DFilters(
+            dataset__regex = dataset,
+            me__regex = me,
+            run_number = run
+          )
+        elif args.metype=='h2d':
+          dialsfilters = LumisectionHistogram2DFilters(
+            dataset__regex = dataset,
+            me__regex = me,
+            run_number = run
+          )
+        else:
+          msg = 'ERROR: metype {} not recognized'.format(args.metype)
+          raise Exception(msg)
         max_pages = None
         if args.test: max_pages = 1
 
         # make the dials request
-        data = get_data(h2dfilters, max_pages=max_pages)
+        data = get_data(dialsfilters, max_pages=max_pages)
 
         # convert to dataframe
         df = data.to_pandas()

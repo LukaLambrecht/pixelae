@@ -12,6 +12,8 @@ See `jsons/datasets_zerobias_2024_promptreco_das.json` and `jsons/mes_digioccupa
 Next, run `python3 get_data_dials_loop.py` with the following options:
 - `-d / --datasets`: path to json file with dataset names.
 - `-m / --menames`: path to json file with ME names.
+- `-t / --metype`: type of MEs (choose from "h1d" or "h2d"), needed for correct DIALS syntax. Note: --menames json files with mixed 1D and 2D MEs are not supported, they should be splitted and submitted separately.
+- `-w / --workspace`: DIALS-workspace, see [the documentation](https://github.com/cms-DQM/dials-py?tab=readme-ov-file#workspace), default is `tracker`.
 - `-o / --outputdir`: output directory.
 - `--splitdatasets`: split into separate jobs per dataset (Note: any regex-style wildcards are transfered verbatim to the DIALS API, and hence jobs are split before rather than after the expansion of these wildcards).
 - `--splitmes`: split into separate jobs per ME (Note: any regex-style wildcards are transfered verbatim to the DIALS API, and hence jobs are split before rather than after the expansion of these wildcards).
