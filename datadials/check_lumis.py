@@ -20,8 +20,8 @@ def get_lumis_das(datasetname):
   runlumis = sorted([el.strip(' \t') for el in dasstdout.strip('\n').split('\n')])
   # format of runlumis is a list with strings of format '<run nb> [<ls nbs>]'
   if len(runlumis)==1 and runlumis[0]=='':
-    runs = np.array()
-    lumis = np.array()
+    runs = np.array([])
+    lumis = np.array([])
     return (runs, lumis)
   allruns = []
   alllumis = []
@@ -54,6 +54,7 @@ if __name__=='__main__':
   parser = argparse.ArgumentParser(description='Check available lumisections')
   parser.add_argument('-d', '--datasets', required=True)
   parser.add_argument('-p', '--parquetfiles', required=True, nargs='+')
+  parser.add_argument('--print_missing', default=False, action='store_true')
   args = parser.parse_args()
   
   # print arguments
@@ -92,6 +93,11 @@ if __name__=='__main__':
       ids = runs*idfactor + lumis
       missing = np.setdiff1d(refids, ids)
       print('    - File: {}: {} missing lumisections'.format(parquetfile, len(missing)))
+      if( len(missing)>0 and args.print_missing ):
+        missing_runs = (missing/idfactor).astype(int)
+        missing_lumis = np.remainder(missing, idfactor).astype(int)
+        missing_runlumis = [(run, lumi) for run, lumi in zip(missing_runs, missing_lumis)]
+        print('            {}'.format(missing_runlumis))
 
   # check overlap between datasets
   print('Checking overlap between datasets:')

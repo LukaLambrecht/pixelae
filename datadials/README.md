@@ -8,6 +8,8 @@ You can use these scripts directly, or as an inspiration on how to use the DIALS
 You need two `json` files as an input: one that specifies the dataset(s), and one that specifies the monitoring element(s) (MEs).
 Both of these can contain regex-style special characters to include multiple datasets or MEs in a single line.
 See `jsons/datasets_zerobias_2024_promptreco_das.json` and `jsons/mes_digioccupancy.json` for examples on the correct formatting.
+Note: regex pattern matching is enabled by default, so some special characters (such as `+`) need to be escaped using a double backslash if you want to pass them literally.
+See `jsons/mes_charge.json` for examples.
 
 Next, run `python3 get_data_dials_loop.py` with the following options:
 - `-d / --datasets`: path to json file with dataset names.
@@ -38,3 +40,18 @@ Note: this check requires a valid grid proxy to use the DAS API.
 Sometimes transient errors might occur and crash a job. 
 In those cases, you can add the `--resubmit` argument to `get_data_dials_loop.py` to submit only the jobs corresponding to datasets and MEs that do not have a corresponding output file yet.
 If the errors persist, they are probably not transient and you might want to have a more detailed look.
+
+### Example: getting all cluster charge MEs for 2024 data
+As a practical example, we retrieve the cluster charge monitoring elements for 2024 data.
+
+The first step is to make a json file listing the MEs of interest. You can find it in `jsons/mes_charge.json`.
+Next, we make another json file listing the datasets of interest. The result is in `jsons/datasets_zerobias_2024_promptreco_das.json`.
+Note: at the time of writing, 2024E data taking is ongoing.
+
+Initialize the credentials using `python3 init_credentials.py`.
+
+Submit the jobs using `python3 get_data_dials_loop.py -d jsons/datasets_zerobias_2024_promptreco_das.json -m jsons/mes_charge.json -t h1d -o output_test --splitdatasets --splitmes --runmode condor`.
+While the jobs are running, you can check their status with `condor_q`, `python3 ../jobsubmission/jobcheck.py --notags` (when the jobs are finished, you can omit the `--notags` argument), and `python3 check_jobstatus.py -i cjob_get_data_out_*`
+
+When all jobs are successfully finished, check the lumisections in the resulting files using `python3 check_lumis.py -d jsons/datasets_zerobias_2024_promptreco_das.json -p output_test/*.parquet`
+(but make sure to use `voms-proxy-init --voms cms` before that if you don't have a valid proxy already).

@@ -57,7 +57,6 @@ def get_data(filters, max_attempts=5, max_pages=None):
   
   # first define correct cmsdials api function
   # based on the type of filters
-  print(type(filters))
   if isinstance(filters, LumisectionHistogram1DFilters):
     dialsfunc = dials.h1d.list_all
   elif isinstance(filters, LumisectionHistogram2DFilters):
@@ -180,6 +179,7 @@ if __name__=='__main__':
       # (if requested)
       if args.resubmit:
         outputfile = (dataset+'-'+me).strip('/').replace('/','-')+'.parquet'
+        outputfile = outputfile.replace('\\','')
         outputfile = os.path.join(args.outputdir, outputfile)
         if os.path.exists(outputfile):
           print('Output file {} already exists, skipping this part.'.format(outputfile))
@@ -220,6 +220,11 @@ if __name__=='__main__':
       # concatenate results for all runs
       df = pd.concat(dfs, ignore_index=True)
 
+      # check if the dataframe is empty
+      if len(df)==0:
+        msg = 'ERROR: resulting dataframe is empty, cannot write output file.'
+        raise Exception(msg)
+
       # check if the dataframe contains multiple datasets and/or MEs
       # (can occur if the provided dataset/ME name is a regular expression),
       # and if so, split into one dataframe per dataset and ME.
@@ -237,6 +242,7 @@ if __name__=='__main__':
       for datasetname in dfdict.keys():
         for mename in dfdict[datasetname].keys():
           outputfile = (datasetname+'-'+mename).strip('/').replace('/','-')+'.parquet'
+          outputfile = outputfile.replace('\\','')
           outputfile = os.path.join(args.outputdir, outputfile)
           dfdict[datasetname][mename].to_parquet(outputfile)
 
