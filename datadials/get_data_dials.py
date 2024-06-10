@@ -70,12 +70,12 @@ def get_data(filters, max_attempts=5, max_pages=None):
   while (attempt_counter<max_attempts and not data_retrieved):
     attempt_counter += 1
     try:
-      data = dialsfunc(filters, max_pages=max_pages, progress_bar=False)
+      data = dialsfunc(filters, max_pages=max_pages, enable_progress=False)
       data_retrieved = True
     except: continue
   if not data_retrieved:
     # try one more time to trigger the original error
-    data = dialsfunc(filters, max_pages=max_pages, progress_bar=False)
+    data = dialsfunc(filters, max_pages=max_pages, enable_progress=False)
   sys.stdout.flush()
   sys.stderr.flush()
   return data
@@ -164,7 +164,7 @@ if __name__=='__main__':
     # note: this is done to make separate calls per run 
     #       instead of one giant call for a full dataset
     runfilters = RunFilters(dataset__regex=dataset)
-    runs = dials.run.list_all(runfilters, progress_bar=False).results
+    runs = dials.run.list_all(runfilters, enable_progress=False).results
     runs = sorted([el.run_number for el in runs])
     print('Found {} runs'.format(len(runs)))
 

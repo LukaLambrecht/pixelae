@@ -99,6 +99,7 @@ if __name__=='__main__':
     for dataset, datasetfile in zip(datasets,datasetfiles):
       for me, mefile in zip(menames, mefiles):
         outputfile = (dataset+'-'+me).strip('/').replace('/','-')+'.parquet'
+        outputfile = outputfile.replace('\\','')
         outputfile = os.path.join(args.outputdir, outputfile)
         if os.path.exists(outputfile):
           existing_output_files.append(outputfile)
