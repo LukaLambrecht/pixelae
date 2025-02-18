@@ -24,3 +24,6 @@ datadials/temp_*
 
 # ignore dials cache
 datadials/.cache/
+
+# ignore oms api secret
+tools/omsapi/clientid.py
