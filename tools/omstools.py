@@ -2,12 +2,13 @@ import os
 import sys
 import json
 import numpy as np
+from fnmatch import fnmatch
 
 
 def find_oms_indices(runs, lumis, omsjson,
                      run_key='run_number', lumi_key='lumisection_number'):
     '''
-    Find indices in and OMS dict for given run and lumisection numbers.
+    Find indices in an OMS dict for given run and lumisection numbers.
     Helper function for find_oms_attr_for_lumisections.
     '''
     # check if run_key and lumi_key are present in the omsjson
@@ -74,3 +75,70 @@ def find_oms_attr_for_lumisections(runs, lumis, omsjson, omsattr, **kwargs):
     # retrieve indices for provided lumisections
     indices = find_oms_indices(runs, lumis, omsjson, **kwargs)
     return np.array(omsjson[omsattr])[indices]
+
+def find_hlt_rate_for_lumisections(runs, lumis, hltratejson, hltname,
+                                   run_key='run_number', lumi_key='first_lumisection_number',
+                                   rate_key='rate', **kwargs):
+    '''
+    Retrieve HLT rate for given run and lumisection numbers.
+    Input arguments:
+    - runs and lumis: 1D arrays of the same length, with run and lumisection numbers.
+    - hltratejson: a dict with HLT rate information from OMS, assumed to be of the form
+                   {run number: {trigger name: {lumi key: [...],
+                       run key: [...], rate key: [...]}}}.
+                   the dict must have an attribute corresponding to run number,
+                   an attribute corresponding to lumisection number,
+                   and an attribute corresponding to the rate.
+                   the names of these attributes can be passed as arguments.
+    - hltname: the name of the trigger to retrieve for the given lumisections
+               (may contain unix-style wildcards, as long as the result is unique for each run).
+    - kwargs: todo
+    Returns:
+    - a 1D array of the same length as runs and lumis,
+      with the values of the HLT rate for the requested lumisections.
+    '''
+    
+    # partition runs and lumis into unique run numbers
+    unique_runs = []
+    for run in runs:
+        if run not in unique_runs: unique_runs.append(run)
+        # (note: cannot use list(set(run))) as order must be preserved
+    partitions = [np.nonzero(runs==unique_run) for unique_run in unique_runs]
+    rate_parts = []
+    
+    # loop over partitions
+    for unique_run, partition_ids in zip(unique_runs, partitions):
+        r = runs[partition_ids]
+        l = lumis[partition_ids]
+        runkey = str(unique_run)
+        if runkey not in hltratejson.keys():
+            msg = f'WARNING: run {runkey} not in hlt rate json,'
+            msg += ' will use default rate 0.'
+            print(msg)
+            rate = np.zeros(len(r))
+            rate_parts.append(rate)
+            continue
+        hltrates = hltratejson[runkey]
+        
+        # find trigger name
+        matchnames = [name for name in hltrates.keys() if fnmatch(name, hltname)]
+        if len(matchnames) > 1:
+            msg = f'Ambiguity for run {runkey} and requested trigger {hltname}:'
+            msg += f' found more than one matches: {matchnames}.'
+            raise Exception(msg)
+        if len(matchnames) == 0:
+            msg = f'WARNING for run {runkey} and requested trigger {hltname}:'
+            msg += ' no matching triggers found, will use default rate 0.'
+            print(msg)
+            rate = np.zeros(len(r))
+            rate_parts.append(rate)
+            continue
+        
+        # retrieve rate
+        rate = hltrates[matchnames[0]]
+        rate = find_oms_attr_for_lumisections(r, l, rate, rate_key,
+                  run_key=run_key, lumi_key=lumi_key)
+        rate_parts.append(rate)
+        
+    rate = np.concatenate(rate_parts)
+    return rate
