@@ -83,7 +83,7 @@ def find_oms_attr_for_lumisections(runs, lumis, omsjson, omsattr, **kwargs):
 
 def find_hlt_rate_for_lumisections(runs, lumis, hltratejson, hltname,
                                    run_key='run_number', lumi_key='first_lumisection_number',
-                                   rate_key='rate', **kwargs):
+                                   rate_key='rate', verbose=True, **kwargs):
     '''
     Retrieve HLT rate for given run and lumisection numbers.
     Input arguments:
@@ -119,7 +119,7 @@ def find_hlt_rate_for_lumisections(runs, lumis, hltratejson, hltname,
         if runkey not in hltratejson.keys():
             msg = f'WARNING: run {runkey} not in hlt rate json,'
             msg += ' will use default rate 0.'
-            print(msg)
+            if verbose: print(msg)
             rate = np.zeros(len(r))
             rate_parts.append(rate)
             continue
@@ -134,7 +134,7 @@ def find_hlt_rate_for_lumisections(runs, lumis, hltratejson, hltname,
         if len(matchnames) == 0:
             msg = f'WARNING for run {runkey} and requested trigger {hltname}:'
             msg += ' no matching triggers found, will use default rate 0.'
-            print(msg)
+            if verbose: print(msg)
             rate = np.zeros(len(r))
             rate_parts.append(rate)
             continue
