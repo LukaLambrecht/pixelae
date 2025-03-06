@@ -19,14 +19,11 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from requests.exceptions import ConnectionError
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-
-OMS_FILTER_OPERATORS = ["EQ", "NEQ", "LT", "GT", "LE", "GE", "LIKE"]
+OMS_FILTER_OPERATORS = ["EQ", "NEQ", "LT", "GT", "LE", "GE", "LIKE", 'CT']
 OMS_INCLUDES = ["meta", "presentation_timestamp", "data_only"]
 
 #OpenID parameters
-cern_auth_token_url='https://auth.cern.ch/auth/realms/cern/protocol/openid-connect/token'
-grant_type='client_credentials'
-exc_token_type='access_token'
+cern_api_url='https://auth.cern.ch/auth/realms/cern/api-access/token'
 
 class OMSApiException(Exception):
     """ OMS API Client Exception """
@@ -36,16 +33,19 @@ class OMSApiException(Exception):
 class OMSQuery(object):
     """ OMS Query object """
 
-    def __init__(self, base_url, resource, verbose, cookies, oms_auth, cert_verify, retry_on_err_sec, proxies):
+    def __init__(self, base_url, resource, verbose, cookies, oms_auth, tsg_auth, cert_verify, throw_on_err, retry_on_err_sec, retry_on_err_attempts, proxies):
         self.attribute_validation = True
         self.base_url = base_url
         self.resource = resource
         self.verbose = verbose
         self.cookies = cookies
         self.oms_auth = oms_auth
+        self.tsg_auth = tsg_auth
         self.cert_verify = cert_verify
         self.err_sec = retry_on_err_sec
+        self.err_attempts = retry_on_err_attempts
         self.proxies = proxies
+        self.throw_on_err = throw_on_err
 
         self._attrs = None  # Projection
         self._filter = []  # Filtering
@@ -71,9 +71,9 @@ class OMSQuery(object):
         """
 
         if self.metadata and attr not in self.metadata:
-            self._warn("Attribute [{attr}] does not exist. " +
+            self._warn(f"Attribute [{attr}] does not exist. " +
                        "Check for a typo or disable validation " +
-                       "by .set_validation(False) ".format(attr=attr))
+                       "by .set_validation(False) ")
 
             # Return True if attribute validation is disabled
             return False == self.attribute_validation
@@ -89,7 +89,9 @@ class OMSQuery(object):
 
         response = self.get_request(url, verify=self.cert_verify)
 
-        if response.status_code != 200:
+        if response.status_code == 302:
+            raise Exception("Received redirect (HTTP 302). Try to switch between http/https protocol")
+        elif response.status_code != 200:
             self._warn("Failed to fetch meta information")
         else:
             try:
@@ -299,7 +301,7 @@ class OMSQuery(object):
                 str
         """
 
-        url = "{base_url}/{resource}/".format(base_url=self.base_url,
+        url = "{base_url}/{resource}".format(base_url=self.base_url,
                                               resource=self.resource)
 
         url_params = []
@@ -345,16 +347,13 @@ class OMSQuery(object):
 
         if self.verbose:
             print(url)
-        if self.err_sec > 0:
-            while True:
-                try:
-                    ret = self.get_request(url, verify=self.cert_verify)
-                    break
-                except ConnectionError as ex:
-                    print("Warning: will retry in " + str(self.err_sec) + "seconds after connection error: " + str(ex))
-                    time.sleep(self.err_sec)
-        else:
-            ret = self.get_request(url, verify=self.cert_verify)
+        ret = self.get_request(url, verify=self.cert_verify)
+
+        if ret.status_code == 302:
+            raise Exception("Received redirect (HTTP 302). Try to switch between http/https protocol")
+
+        if self.throw_on_err and ret.status_code not in [200, 201]:
+            raise Exception("HTTP Error", ret)
 
         return ret
 
@@ -368,21 +367,106 @@ class OMSQuery(object):
         return self.metadata
 
     def get_request(self, url, verify=False):
+        if (self.err_sec > 0 or self.err_attempts != 0):
+            retries = 0
+            while True:
+                try:
+                    return self.get_request_noretry(url, verify=verify)
+                except ConnectionError as ex:
+                    if self.throw_on_err:
+                        raise
+                    if self.err_attempts == retries:
+                        raise
+                    print("Warning: will retry in " + str(self.err_sec) + " seconds after connection error: " + str(ex))
+                    retries += 1
+                    time.sleep(self.err_sec)
+        else:
+            return self.get_request_noretry(url, verify=verify)
+
+    def get_request_noretry(self, url, verify=False):
         if self.oms_auth:
-            response = requests.get(url, verify=verify, headers=self.oms_auth.token_headers, proxies=self.proxies)
+            response = requests.get(url, verify=verify, headers=self.oms_auth.token_headers, proxies=self.proxies, allow_redirects=False)
             #check if token has expired (Unauthorized)
             if response.status_code == 401:
                 print("Unauthorized. Will try to obtain a new token")
                 self.oms_auth.auth_oidc()
-                return requests.get(url, verify=verify, headers=self.oms_auth.token_headers, proxies=self.proxies)
+                return requests.get(url, verify=verify, headers=self.oms_auth.token_headers, proxies=self.proxies, allow_redirects=False)
             return response
+        elif self.tsg_auth:            
+            return requests.get(url, verify=verify, proxies=self.proxies, allow_redirects=False, **self.tsg_auth.authparams())
         else:
-            return requests.get(url, verify=verify, cookies=self.cookies, proxies=self.proxies)
-        
+            return requests.get(url, verify=verify, cookies=self.cookies, proxies=self.proxies, allow_redirects=False)
+
+
+
+class OMSMetaQuery(object):
+    """ OMS Meta Query object """
+
+    def __init__(self, base_url, verbose, cookies, oms_auth, tsg_auth, cert_verify, throw_on_err, retry_on_err_sec, retry_on_err_attempts, proxies):
+        self.attribute_validation = True
+        self.base_url = base_url
+        self.verbose = verbose
+        self.cookies = cookies
+        self.oms_auth = oms_auth
+        self.tsg_auth = tsg_auth
+        self.cert_verify = cert_verify
+        self.throw_on_err = throw_on_err
+        self.err_sec = retry_on_err_sec
+        self.err_attempts = retry_on_err_attempts
+        self.proxies = proxies
+
+    def data(self, path):
+        if path.startswith('/'):
+            url_query = self.base_url + path
+        else:
+            url_query = self.base_url + '/' + path
+
+        ret = self.get_request(url_query, verify=self.cert_verify)
+
+        if ret.status_code == 302:
+            raise Exception("Received redirect (HTTP 302). Try to switch between http/https protocol")
+
+        if self.throw_on_err and ret.status_code not in [200, 201]:
+            raise Exception("HTTP Error (Meta)", ret)
+
+        return ret
+
+    def get_request(self, url, verify=False):
+        if self.err_sec > 0 or self.err_attempts !=0:
+            retries = 0
+            while True:
+                try:
+                    return self.get_request_noretry(url, verify=verify)
+                except ConnectionError as ex:
+                    if self.throw_on_err:
+                        raise
+                    if self.err_attempts == retries:
+                        raise
+                    print("Warning: will retry meta query in " + str(self.err_sec) + " seconds after connection error: " + str(ex))
+                    retries += 1
+                    time.sleep(self.err_sec)
+        else:
+            return self.get_request_noretry(url, verify=verify)
+
+    def get_request_noretry(self, url, verify=False):
+        if self.oms_auth:
+            response = requests.get(url, verify=verify, headers=self.oms_auth.token_headers, proxies=self.proxies, allow_redirects=False)
+            #check if token has expired (Unauthorized)
+            if response.status_code == 401:
+                print("Unauthorized. Will try to obtain a new token")
+                self.oms_auth.auth_oidc()
+                return requests.get(url, verify=verify, headers=self.oms_auth.token_headers, proxies=self.proxies, allow_redirects=False)
+            return response
+        elif self.tsg_auth:
+            return requests.get(url, verify=verify, proxies=self.proxies, allow_redirects=False, **self.tsg_auth.authparams())
+        else:
+            return requests.get(url, verify=verify, cookies=self.cookies, proxies=self.proxies, allow_redirects=False)
+
+ 
 class OMSAPIOAuth(object):
     """ OMS API token store and manager """
 
-    def __init__(self, client_id, client_secret, audience="cmsoms-prod", cert_verify=True, proxies={}, retry_on_err_sec=0):
+    def __init__(self, client_id, client_secret, audience="cmsoms-prod", cert_verify=True, proxies={}, retry_on_err_sec=10, retry_on_err_attempts=1):
         self.client_id = client_id
         self.client_secret = client_secret
         self.audience = audience
@@ -391,16 +475,21 @@ class OMSAPIOAuth(object):
         self.token_json = None
         self.token_time = None
         self.err_sec = retry_on_err_sec
+        self.err_attempts = retry_on_err_attempts
  
     def auth_oidc(self):
         """ Authorisation Using CERN Open ID authentication wrappeer"""
         if self.err_sec > 0:
+            retry_count = 0
             while True:
+                if retry_count == self.err_attempts:
+                    #reached limit or retry limit is 0
+                    return self.auth_oidc_req()
                 try:
-                    ret = self.auth_oidc_req()
-                    return ret
+                    return self.auth_oidc_req()
                 except ConnectionError as ex:
-                    print("Warning: will retry auth_oidc in " + str(self.err_sec) + "seconds after connection error: " + str(ex))
+                    print("Warning: will retry auth_oidc in " + str(self.err_sec) + " seconds after connection error: " + str(ex))
+                    retry_count += 1
                     time.sleep(self.err_sec)
         else:
             return self.auth_oidc_req()
@@ -412,48 +501,36 @@ class OMSAPIOAuth(object):
         if self.token_json and self.token_time:
             if current_time - self.token_time < 30:
                 print("Warning: token was requested less than 30 seconds ago. Will not renew this time.")
-                return
+                return "OK"
                 
         self.token_time = current_time
         token_req_data = {
-            'grant_type': grant_type,
+            'grant_type': 'client_credentials',
             'client_id': self.client_id,
-            'client_secret': self.client_secret
+            'client_secret': self.client_secret,
+            'audience': self.audience
         }
-        ret = requests.post(cern_auth_token_url, data=token_req_data, verify=self.cert_verify, proxies=self.proxies)
+        ret = requests.post(cern_api_url, data=token_req_data, verify=self.cert_verify, proxies=self.proxies)
         if ret.status_code!=200:
             raise Exception("Unable to acquire OAuth token: " + ret.content.decode())
 
-        res = json.loads(ret.content)
-
-        exchange_data = {
-            'client_id': self.client_id,
-            'client_secret': self.client_secret,
-            'subject_token': res['access_token'],
-            'audience': self.audience,
-            'grant_type':'urn:ietf:params:oauth:grant-type:token-exchange',
-            'requested_token_type':'urn:ietf:params:oauth:token-type:'+ exc_token_type
-        }
-
-        #cert verification disabled
-        ret = requests.post(cern_auth_token_url, data=exchange_data, verify=self.cert_verify, proxies=self.proxies)
-        if ret.status_code!=200:
-            raise Exception("Unable to exchange OAuth token: " + ret.content.decode())
-
         self.token_json = json.loads(ret.content)
-        self.token_headers = {'Authorization':'Bearer ' + self.token_json["access_token"]}
-        
-        
+        self.token_headers = {'Authorization':'Bearer ' + self.token_json["access_token"], 'content-type':'application/json'}
+        return "OK"
+
+ 
 class OMSAPI(object):
     """ Base OMS API client """
 
-    def __init__(self, api_url="https://cmsoms.cern.ch/agg/api", api_version="v1", verbose=True, cert_verify=True, retry_on_err_sec=0, proxies={}):
+    def __init__(self, api_url="https://cmsoms.cern.ch/agg/api", api_version="v1", verbose=True, cert_verify=True, throw_on_err=False, retry_on_err_sec=10, retry_on_err_attempts=1, proxies={}):
         self.api_url = api_url
         self.api_version = api_version
         self.verbose = verbose
         self.cert_verify = cert_verify 
         self.err_sec = retry_on_err_sec
+        self.err_attempts = retry_on_err_attempts
         self.proxies = proxies
+        self.throw_on_err = throw_on_err
 
         self.base_url = "{api_url}/{api_version}".format(api_url=api_url,
                                                          api_version=api_version)
@@ -465,13 +542,32 @@ class OMSAPI(object):
         else:
             self.api_url_host = self.api_url_host[: self.api_url_host.find('/')]
         self.oms_auth = None
+        self.tsg_auth = None
         self.cookies = {}
 
     def query(self, resource, query_validation=True):
         """ Create query object """
 
         q = OMSQuery(self.base_url, resource=resource, verbose=self.verbose,
-                     cookies=self.cookies, oms_auth=self.oms_auth, cert_verify=self.cert_verify, retry_on_err_sec=self.err_sec, proxies=self.proxies)
+                     cookies=self.cookies, oms_auth=self.oms_auth,
+                     tsg_auth=self.tsg_auth, cert_verify=self.cert_verify,
+                     throw_on_err=self.throw_on_err,
+                     retry_on_err_sec=self.err_sec,
+                     retry_on_err_attempts=self.err_attempts,
+                     proxies=self.proxies)
+
+        return q
+
+    def query_metadata(self, query_validation=True):
+        """ Create query object for metadata"""
+
+        q = OMSMetaQuery(self.api_url, verbose=self.verbose,
+                     cookies=self.cookies, oms_auth=self.oms_auth,
+                     tsg_auth=self.tsg_auth, cert_verify=self.cert_verify,
+                     throw_on_err=self.throw_on_err,
+                     retry_on_err_sec=self.err_sec,
+                     retry_on_err_attempts=self.err_attempts,
+                     proxies=self.proxies)
 
         return q
 
@@ -479,47 +575,33 @@ class OMSAPI(object):
         """ Authorisation Using CERN Open ID authentication """
 
         if not self.oms_auth:
-            self.oms_auth = OMSAPIOAuth(client_id, client_secret, audience, self.cert_verify, proxies=proxies, retry_on_err_sec=self.err_sec)
+            self.oms_auth = OMSAPIOAuth(client_id, client_secret, audience,
+                                        self.cert_verify, proxies=proxies,
+                                        retry_on_err_sec=self.err_sec,
+                                        retry_on_err_attempts=self.err_attempts)
         self.oms_auth.auth_oidc()
 
-    def auth_krb(self, cookie_path="ssocookies.txt"):
-        """ Authorisation for https using kerberos"""
+    def auth_krb(self):
+        """ Authorisation for https using kerberos, also supports 2FA"""
+        import tsgauth
+        tsg_auth = tsgauth.oidcauth.KerbSessionAuth()
+        #tsg auth is designed to be used with requests as get(url, **tsg_auth.authparams())
+        #it also does a generic log into the CERN SSO and then exchanges that for a session cookie of the appropiate website
+        #however this doesnt work for us here as we want to use the cookies directly and more importantly we have forbidden
+        #redirects when making the request which means we cant exchange the SSO cookie for the session cookie for oms
+        #so what we do is we make a dummy request to the oms website to get the session cookie and then we use that to make the request
 
-        def rm_file(filename):
-            if os.path.isfile(filename) and os.access(filename, os.R_OK):
-                os.remove(filename)
-
-        rm_file(cookie_path)
-        args = ["auth-get-sso-cookie", "-u", self.api_url_host, "-o", cookie_path]
-        if not self.cert_verify:
-            args.append("--nocertverify")
-        try:
-            subprocess.call(args)
-        except OSError as e:
-            if e.errno == os.errno.ENOENT:
-                #this package is available from CERN repos:
-                #http://linuxsoft.cern.ch/internal/repos/authz7-stable/x86_64/os
-                #http://linuxsoft.cern.ch/internal/repos/authz8-stable/x86_64/os
-                raise OMSApiException(
-                    "Required package is not available. yum install auth-get-sso-cookie")
-            else:
-                raise OMSApiException("Failed to authenticate with kerberos")
-
+        session = requests.Session()
+        session.get(self.api_url_host,**tsg_auth.authparams(),verify=False)
         self.cookies = {}
+        for c in session.cookies.get_dict():
+            if c.startswith('mod_auth_openidc_'):
+                self.cookies[c] = session.cookies[c]
 
-        with open(cookie_path, "r") as f:
-            cookies_raw = f.read()
-
-            for line in cookies_raw.split("\n"):
-                fields = line.split()
-                if len(fields) == 7:
-                    # fields = domain tailmatch path secure expires name value
-                    key = fields[5]
-
-                    if any(p in key for p in ["mod_auth_openidc_session"]):
-                        self.cookies[key] = fields[6]
-
-        if not self.cookies.keys():
-            raise OMSApiException("Unkown cookies")
-
-        rm_file(cookie_path)
+    def auth_device(self,client_id ="cmsoms-prod-public", client_secret = None, audience="cmsoms-prod", use_auth_file=True):
+    
+        """ Authorisation for https using device authentication"""
+        import tsgauth
+        if not self.tsg_auth:
+            self.tsg_auth = tsgauth.oidcauth.DeviceAuth(client_id=client_id, client_secret=client_secret, 
+                                                        target_client_id=audience, use_auth_file=use_auth_file)

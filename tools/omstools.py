@@ -33,21 +33,23 @@ def find_oms_indices(runs, lumis, omsjson,
     # note: reduce from error to warning,
     # since it seems some lumisections are intrinsically missing in OMS,
     # e.g. run 380147, LS 186.
+    threshold = None
     if np.any(np.isin(ids, omsids, invert=True)):
-        missing_indices = np.isin(ids, omsids, invert=True).nonzero()[0]
-        missing_ids = ids[missing_indices]
+        missing_ids_inds = np.isin(ids, omsids, invert=True).nonzero()[0]
+        missing_ids = ids[missing_ids_inds]
         msg = 'WARNING: not all provided lumisections could be found in the oms data.'
         msg += ' Missing lumisections are: {} ({} / {})'.format(missing_ids, len(missing_ids), len(ids))
         print(msg)
-    # approach 1: using np.searchsorted
-    # note: this will implicitly use neighbouring values for lumisections not found in the omsjson.
+        # temporarily add the missing ids to omsids
+        # (corresponding indices will be set to -1 later)
+        threshold = len(omsids)
+        omsids = np.concatenate((omsids, missing_ids))
+    # find indices of ids in omsids
     omsids_sorted_inds = np.argsort(omsids)
     omsids_sorted = omsids[omsids_sorted_inds]
     indices = np.searchsorted(omsids_sorted, ids, side='left')
     indices = omsids_sorted_inds[indices]
-    # approach 2: using np.isin
-    # note: cleaner, but gives error on lumisections not found in the omsjson.
-    #indices = np.isin(omsids, ids).nonzero()[0]
+    if threshold is not None: indices = np.where(indices>=threshold, -1, indices)
     return indices
 
 def find_oms_attr_for_lumisections(runs, lumis, omsjson, omsattr, **kwargs):
@@ -74,7 +76,10 @@ def find_oms_attr_for_lumisections(runs, lumis, omsjson, omsattr, **kwargs):
         raise Exception(msg)
     # retrieve indices for provided lumisections
     indices = find_oms_indices(runs, lumis, omsjson, **kwargs)
-    return np.array(omsjson[omsattr])[indices]
+    # make array of values corresponding to indices
+    # (assume index -1 is used as a default for lumisections that are missing in the omsjson)
+    values = np.array([(omsjson[omsattr][idx] if idx>-1 else 0) for idx in indices])
+    return values
 
 def find_hlt_rate_for_lumisections(runs, lumis, hltratejson, hltname,
                                    run_key='run_number', lumi_key='first_lumisection_number',

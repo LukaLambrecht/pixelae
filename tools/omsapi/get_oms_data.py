@@ -21,9 +21,10 @@
 ### imports
 
 # external modules
-import sys
 import os
-import fnmatch
+import sys
+import numpy as np
+from fnmatch import fnmatch
 
 # local modules
 thisdir = os.path.abspath(os.path.dirname(__file__))
@@ -188,7 +189,7 @@ def filter_oms_response( omsresponse, key, value ):
     for i in range(len(omsresponse['data'])):
         thisvalue = str(omsresponse['data'][i]['attributes'][key])
         for item in value:
-            if( fnmatch.fnmatch(thisvalue,str(item)) ):
+            if( fnmatch(thisvalue,str(item)) ):
                 newomsdata.append(omsresponse['data'][i])
                 continue
     return {'data':newomsdata}
