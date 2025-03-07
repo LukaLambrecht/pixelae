@@ -123,7 +123,8 @@ def select_highstat(df, entriescolumn='entries', xbinscolumn='xbins', entries_to
     
 # functions to obtain histograms in np array format
 
-def get_mes(df, datacolumn='data', xbinscolumn='xbins', ybinscolumn='ybins', runcolumn='run', lumicolumn='lumi',
+def get_mes(df, datacolumn='data', xbinscolumn='xbins', ybinscolumn='ybins',
+            runcolumn='run', lumicolumn='lumi',
             runs=None, lumis=None):
     """
     Get monitoring elements as a numpy array from a dataframe.

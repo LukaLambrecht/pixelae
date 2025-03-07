@@ -4,9 +4,12 @@ import os
 import sys
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+from pyarrow.parquet import ParquetFile
 
 
-def read_parquet(path, **kwargs):
+def read_parquet(path, verbose=False, 
+                 columns=None, batch_size=None, first_batch=0, last_batch=0):
     """
     Read a parquet file into a dataframe.
     Input arguments:
@@ -15,8 +18,46 @@ def read_parquet(path, **kwargs):
       see https://pandas.pydata.org/docs/reference/api/pandas.read_parquet.html.
     Returns:
     - dataframe with the contents of the read file.
-    Note: for now this function is just a trivial wrapper around pandas.read_parquet,
-    but maybe extend later.
     """
-    df = pd.read_parquet(path, **kwargs)
+    if batch_size is None:
+        # standard case where all rows are read
+        df = pd.read_parquet(path, columns=columns)
+    else:
+        # more involved case where only a section of rows is read
+        pf = ParquetFile(path)
+        if verbose:
+            print('Found following parquet metadata:')
+            print(pf.metadata)
+            
+        # check internal consistency
+        if last_batch < first_batch:
+            last_batch = first_batch
+            if verbose:
+                msg = f'WARNING: setting last_batch to {last_batch}'
+                msg += ' as values smaller than first_batch are not supported.'
+                print(msg)
+        
+        # check available rows
+        num_rows = pf.metadata.num_rows
+        first_row = first_batch * batch_size
+        if first_row >= num_rows:
+            msg = f'Requested to read first row {first_row},'
+            msg += f' but the data has only {num_rows} rows.'
+            raise Exception(msg)
+        first_row_last_batch = last_batch * batch_size
+        if first_row_last_batch >= num_rows:
+            last_batch = int((num_rows-1) / batch_size)
+            if verbose:
+                msg = f'WARNING: setting last_batch to {last_batch}'
+                msg += f' as the data only has {num_rows} rows.'
+                print(msg)
+        
+        # iterate through the batches
+        iterobj = pf.iter_batches(batch_size = batch_size)
+        for counter in range(first_batch): _ = next(iterobj)
+        batches = [next(iterobj) for counter in range(last_batch+1-first_batch)]
+        df = pa.Table.from_batches(batches).to_pandas()
+        
+    if verbose:
+        print(f'Read dataframe with {len(df)} rows and {len(df.columns)} columns.')
     return df
