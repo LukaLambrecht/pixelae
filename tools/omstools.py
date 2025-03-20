@@ -6,7 +6,8 @@ from fnmatch import fnmatch
 
 
 def find_oms_indices(runs, lumis, omsjson,
-                     run_key='run_number', lumi_key='lumisection_number'):
+                     run_key='run_number', lumi_key='lumisection_number',
+                     verbose=True):
     '''
     Find indices in an OMS dict for given run and lumisection numbers.
     Helper function for find_oms_attr_for_lumisections.
@@ -37,9 +38,11 @@ def find_oms_indices(runs, lumis, omsjson,
     if np.any(np.isin(ids, omsids, invert=True)):
         missing_ids_inds = np.isin(ids, omsids, invert=True).nonzero()[0]
         missing_ids = ids[missing_ids_inds]
-        msg = 'WARNING: not all provided lumisections could be found in the oms data.'
-        msg += ' Missing lumisections are: {} ({} / {})'.format(missing_ids, len(missing_ids), len(ids))
-        print(msg)
+        if verbose:
+            msg = 'WARNING: not all provided lumisections could be found in the oms data.'
+            msg += f' Missing lumisections are: {missing_ids}'
+            msg += f' ({len(missing_ids)} / {len(ids)})'
+            print(msg)
         # temporarily add the missing ids to omsids
         # (corresponding indices will be set to -1 later)
         threshold = len(omsids)
@@ -83,7 +86,7 @@ def find_oms_attr_for_lumisections(runs, lumis, omsjson, omsattr, **kwargs):
 
 def find_hlt_rate_for_lumisections(runs, lumis, hltratejson, hltname,
                                    run_key='run_number', lumi_key='first_lumisection_number',
-                                   rate_key='rate', verbose=True, **kwargs):
+                                   rate_key='rate', verbose=True):
     '''
     Retrieve HLT rate for given run and lumisection numbers.
     Input arguments:
@@ -97,7 +100,6 @@ def find_hlt_rate_for_lumisections(runs, lumis, hltratejson, hltname,
                    the names of these attributes can be passed as arguments.
     - hltname: the name of the trigger to retrieve for the given lumisections
                (may contain unix-style wildcards, as long as the result is unique for each run).
-    - kwargs: todo
     Returns:
     - a 1D array of the same length as runs and lumis,
       with the values of the HLT rate for the requested lumisections.
@@ -142,7 +144,7 @@ def find_hlt_rate_for_lumisections(runs, lumis, hltratejson, hltname,
         # retrieve rate
         rate = hltrates[matchnames[0]]
         rate = find_oms_attr_for_lumisections(r, l, rate, rate_key,
-                  run_key=run_key, lumi_key=lumi_key)
+                  run_key=run_key, lumi_key=lumi_key, verbose=verbose)
         rate_parts.append(rate)
         
     rate = np.concatenate(rate_parts)

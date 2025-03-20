@@ -15,7 +15,7 @@ class PreProcessor(object):
     Definition and application of preprocessing steps
     '''
     
-    def __init__(self, metype, global_norm=None, local_norm=None):
+    def __init__(self, metype, global_norm=None, local_norm=None, mask=None):
         '''
         Input arguments:
         - metype: type of ME.
@@ -29,6 +29,9 @@ class PreProcessor(object):
         - local_norm: np array of the same shape as the ME,
           used for local normalization by dividing each ME
           bin-by-bin by this array.
+        - mask: np array of the same shape as the ME,
+          used for masking known problematic regions.
+          note: not recommended for input data, better to mask loss directly.
         '''
         
         # copy metype attribute
@@ -49,16 +52,18 @@ class PreProcessor(object):
         # copy global norm attribute
         self.global_norm = global_norm
         
+        # set dimensions for checking
+        required_dims = None
+        if self.metype=='PXLayer_1': required_dims = (26, 72)
+        elif self.metype=='PXLayer_2': required_dims = (58, 72)
+        elif self.metype=='PXLayer_3': required_dims = (90, 72)
+        elif self.metype=='PXLayer_4': required_dims = (130, 72)
+        
         # parse local norm attribute
         self.local_norm = local_norm
         if self.local_norm is not None:
             
             # check dimensions
-            required_dims = None
-            if self.metype=='PXLayer_1': required_dims = (26, 72)
-            elif self.metype=='PXLayer_2': required_dims = (25, 72)
-            elif self.metype=='PXLayer_3': required_dims = (90, 72)
-            elif self.metype=='PXLayer_4': required_dims = (130, 72)
             if required_dims is not None and self.local_norm.shape != required_dims:
                 msg = f'Local norm has shape {self.local_norm.shape} while {required_dims}'
                 msg += f' was expected for ME type {metype}'
@@ -75,6 +80,23 @@ class PreProcessor(object):
             # note: values are set to negative,
             # so they can later be recognized and set to zero.
             self.local_norm[self.local_norm==0] = -1
+            
+        # parse mask attribute
+        self.mask = mask
+        if self.mask is not None:
+            
+            # check dimensions
+            if required_dims is not None and self.mask.shape != required_dims:
+                msg = f'Mask has shape {self.mask.shape} while {required_dims}'
+                msg += f' was expected for ME type {metype}'
+                raise Exception(msg)
+                
+            # do cropping
+            if self.anticrop is not None:
+                slicey = self.anticrop[0]
+                slicex = self.anticrop[1]
+                self.mask = np.delete(self.mask, slicey, axis=0)
+                self.mask = np.delete(self.mask, slicex, axis=1)
             
     
     def preprocess(self, df):
@@ -102,16 +124,50 @@ class PreProcessor(object):
         if self.global_norm is not None:
             norm = omstools.find_oms_attr_for_lumisections(runs, lumis,
                      self.global_norm, 'norm',
-                     run_key='run_number', lumi_key='lumisection_number')
+                     run_key='run_number', lumi_key='lumisection_number',
+                     verbose=False)
             norm[norm==0] = 1
             mes = np.divide(mes, norm[:, None, None])
             
         # do local normalization
         if self.local_norm is not None:
             mes = np.divide(mes[:], self.local_norm)
+            
+        # do masking
+        if self.mask is not None:
+            mes[:, ~self.mask] = 0
         
         # set negative values to zero
         mes[mes < 0] = 0
         
         # return the mes
+        return mes
+    
+    def deprocess(self, mes, runs=None, lumis=None):
+        '''
+        Inverse operation of preprocess
+        '''
+        
+        # local normalization
+        if self.local_norm is not None:
+            mes = np.multiply(mes[:], self.local_norm)
+            
+        # global normalization
+        if self.global_norm is not None:
+            if runs is None or lumis is None:
+                msg = 'Cannot perform inverse preprocessing operation without run and lumisection numbers.'
+                raise Exception(msg)
+            norm = omstools.find_oms_attr_for_lumisections(runs, lumis,
+                     self.global_norm, 'norm',
+                     run_key='run_number', lumi_key='lumisection_number')
+            norm[norm==0] = 1
+            mes = np.multiply(mes, norm[:, None, None])
+            
+        # insert empty cross
+        if self.anticrop is not None:
+            slicey = self.anticrop[0]
+            slicex = self.anticrop[1]
+            mes = np.insert(mes, [int(mes.shape[1]/2)]*2, 0, axis=1)
+            mes = np.insert(mes, [int(mes.shape[2]/2)]*8, 0, axis=2)
+            
         return mes

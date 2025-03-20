@@ -142,11 +142,11 @@ def get_mes(df, datacolumn='data', xbinscolumn='xbins', ybinscolumn='ybins',
     """
     if runs is not None: df = select_runs(df, runs, runcolumn=runcolumn)
     if lumis is not None: df = select_ls(df, lumis, lumicolumn=lumicolumn)
-    xbins = int(df[xbinscolumn][0])
-    ybins = int(df[ybinscolumn][0])
+    xbins = int(df[xbinscolumn].values[0])
+    ybins = int(df[ybinscolumn].values[0])
     # note: df['data'][idx] yields an array of 1d arrays;
     # need to convert it to a 2d array with np.stack
-    mes = np.array([np.stack(df[datacolumn][i]).reshape(ybins,xbins) for i in range(len(df))])
+    mes = np.array([np.stack(df[datacolumn].values[i]).reshape(ybins,xbins) for i in range(len(df))])
     runs = df[runcolumn].values
     lumis = df[lumicolumn].values
     return (mes, runs, lumis)
