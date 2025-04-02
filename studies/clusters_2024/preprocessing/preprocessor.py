@@ -1,13 +1,43 @@
 # external modules
 import os
 import sys
+import json
 import numpy as np
+import pandas as pd
 
 # local modules
 thisdir = os.path.abspath(os.path.dirname(__file__))
 topdir = os.path.abspath(os.path.join(thisdir, '../../../'))
 import tools.dftools as dftools
 import tools.omstools as omstools
+
+
+def make_default_preprocessor(era, layer):
+
+    # set directory to normalization data
+    normdata_dir = os.path.join(os.path.dirname(__file__), 'normdata')
+
+    # load norm json
+    metype = f'PXLayer_{layer}'
+    normfile = os.path.join(normdata_dir, f'normdata_Run2024{era}_{metype}.json')
+    with open(normfile, 'r') as f:
+        norm_info = json.load(f)
+    
+    # divide the norm by the number of bins in order to normalize mean instead of sum
+    if metype=='PXLayer_1': shape = (26, 72)
+    elif metype=='PXLayer_2': shape = (58, 72)
+    elif metype=='PXLayer_3': shape = (90, 72)
+    elif metype=='PXLayer_4': shape = (130, 72)
+    nbins = shape[0] * shape[1]
+    norm_info['norm'] = [val / nbins for val in norm_info['norm']]
+
+    # get the average occupancy map
+    avgmefile = os.path.join(normdata_dir, f'avgme_Run2024{era}_{metype}.npy')
+    avgme = np.load(avgmefile)
+
+    # make a preprocessor
+    preprocessor = PreProcessor(metype, global_norm=norm_info, local_norm=avgme)
+    return preprocessor
 
 
 class PreProcessor(object):
@@ -99,7 +129,7 @@ class PreProcessor(object):
                 self.mask = np.delete(self.mask, slicex, axis=1)
             
     
-    def preprocess(self, df):
+    def preprocess(self, df, verbose=False):
         '''
         Preprocess the data in a dataframe.
         Input arguments:
@@ -112,6 +142,7 @@ class PreProcessor(object):
         mes, runs, lumis = dftools.get_mes(df,
                             xbinscolumn='x_bin', ybinscolumn='y_bin',
                             runcolumn='run_number', lumicolumn='ls_number')
+        preprocessing_info = {'run_number': runs, 'ls_number': lumis}
     
         # remove empty cross
         if self.anticrop is not None:
@@ -128,6 +159,7 @@ class PreProcessor(object):
                      verbose=False)
             norm[norm==0] = 1
             mes = np.divide(mes, norm[:, None, None])
+            preprocessing_info['norm'] = norm
             
         # do local normalization
         if self.local_norm is not None:
@@ -139,6 +171,11 @@ class PreProcessor(object):
         
         # set negative values to zero
         mes[mes < 0] = 0
+        
+        # printouts if requested
+        if verbose:
+            preprocessing_info = pd.DataFrame(preprocessing_info)
+            print(preprocessing_info)
         
         # return the mes
         return mes
