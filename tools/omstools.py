@@ -24,6 +24,10 @@ def find_oms_indices(runs, lumis, omsjson,
     # parse runs and lumis
     runs = np.array(runs).astype(int)
     lumis = np.array(lumis).astype(int)
+    if len(runs.shape)!=1:
+        raise Exception(f'Provided run numbers array has unexpected shape: {runs.shape}')
+    if len(lumis.shape)!=1:
+        raise Exception(f'Provided lumisection numbers array has unexpected shape: {lumis.shape}')
     # combine run and lumisection number into a single unique number
     idfactor = 10000 # warning: do not use 1e4 instead of 10000 to avoid conversion from int to float
     ids = runs*idfactor + lumis
@@ -104,6 +108,14 @@ def find_hlt_rate_for_lumisections(runs, lumis, hltratejson, hltname,
     - a 1D array of the same length as runs and lumis,
       with the values of the HLT rate for the requested lumisections.
     '''
+    
+    # parse runs and lumis
+    runs = np.array(runs).astype(int)
+    lumis = np.array(lumis).astype(int)
+    if len(runs.shape)!=1:
+        raise Exception(f'Provided run numbers array has unexpected shape: {runs.shape}')
+    if len(lumis.shape)!=1:
+        raise Exception(f'Provided lumisection numbers array has unexpected shape: {lumis.shape}')
     
     # partition runs and lumis into unique run numbers
     unique_runs = []

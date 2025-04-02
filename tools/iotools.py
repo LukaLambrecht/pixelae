@@ -61,3 +61,27 @@ def read_parquet(path, verbose=False,
     if verbose:
         print(f'Read dataframe with {len(df)} rows and {len(df.columns)} columns.')
     return df
+
+def read_lumisections(path, run_numbers, ls_numbers,
+                      verbose=False, columns=None,
+                      run_column='run_number', ls_column='ls_number'):
+    # warning: very slow, use only for a few lumisections
+    
+    # find row indices of run and ls numbers
+    df = read_parquet(path, columns=[run_column, ls_column])
+    indices = []
+    for run_number, ls_number in zip(run_numbers, ls_numbers):
+        index = df.index[((df[run_column]==run_number) & (df[ls_column]==ls_number))].tolist()
+        if len(index)!=1:
+            msg = f'Found unexpected list of indices corresponding to run {run_number}, LS {ls_number}, skipping.'
+            print(msg)
+            continue
+        indices.append(index[0])
+    if len(indices)==0:
+        msg = f'Found empty index list, returning None.'
+        print(msg)
+        return None
+    # read those specific rows
+    df = pd.concat([read_parquet(path, verbose=False, columns=columns, batch_size=1, first_batch=idx, last_batch=idx)
+                    for idx in indices])
+    return df

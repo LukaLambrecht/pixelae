@@ -9,8 +9,6 @@
 # the functions in this tool allow creating an executable bash script
 # and its submission via a job description file
 
-# usage: see submit_test_job.py!
-
 import os
 import sys
 
@@ -31,8 +29,11 @@ def makeUnique(fname):
 
 def initJobScript(name, 
                   home=None,
+                  workdir=None,
                   cmssw_version=None,
-                  proxy=None):
+                  proxy=None,
+                  conda_activate=None,
+                  conda_env=None):
     ### initialize an executable bash script with:
     # - setting HOME environment variable
     #   note: use 'auto' to extract the HOME from os.environ
@@ -44,21 +45,33 @@ def initJobScript(name,
     name = os.path.splitext(name)[0]
     fname = name+'.sh'
     if os.path.exists(fname): os.system('rm {}'.format(fname))
-    cwd = os.path.abspath(os.getcwd())
+    if workdir is None: workdir = os.path.abspath(os.getcwd())
     # parse home
     if home=='auto': home = os.environ['HOME']
     # write script
     with open(fname,'w') as script:
+	    # write bash shebang
         script.write('#!/bin/bash\n')
+	    # write echo script name
+        script.write("echo '###exename###: {}'\n".format(fname))
+	    # write export home
         if home is not None:
             script.write('export HOME={}\n'.format(home))
+	    # write sourcing of common software
         script.write('source /cvmfs/cms.cern.ch/cmsset_default.sh\n')
+	    # write setting correct cmssw release
         if cmssw_version is not None:
-            script.write('cd {}\n'.format( os.path.join( cmssw_version,'src') ) )
+            script.write('cd {}\n'.format( os.path.join( cmssw_version,'src' ) ) )
             script.write('eval `scram runtime -sh`\n')
+	    # write export proxy
         if proxy is not None:
             script.write('export X509_USER_PROXY={}\n'.format( proxy ))
-        script.write('cd {}\n'.format( cwd ) )
+        # write conda activate
+        if conda_activate is not None:
+            script.write(conda_activate+'\n')
+        if conda_env is not None:
+            script.write('conda activate {}\n'.format(conda_env))
+        script.write('cd {}\n'.format( workdir ) )
     # make executable
     os.system('chmod +x '+fname)
     print('initJobScript created {}'.format(fname))
@@ -108,26 +121,19 @@ def submitCondorJob(jobDescription):
     # maybe later extend this part to account for failed submissions etc!
     os.system('condor_submit {}'.format(fname))
 
-def submitCommandAsCondorJob(name, command, stdout=None, stderr=None, log=None,
-                        cpus=1, mem=1024, disk=10240,
-                        home=None,
-                        proxy=None, 
-                        cmssw_version=None,
-                        jobflavour=None):
+def submitCommandAsCondorJob(name, command, **kwargs):
     ### submit a single command as a single job
     # command is a string representing a single command (executable + args)
-    submitCommandsAsCondorJobs(name, [[command]], stdout=stdout, stderr=stderr, log=log,
-            cpus=cpus, mem=mem, disk=disk,
-            home=home,
-            proxy=proxy,
-            cmssw_version=cmssw_version,
-            jobflavour=jobflavour)
+    submitCommandsAsCondorJobs(name, [[command]], **kwargs)
 
 def submitCommandsAsCondorCluster(name, commands, stdout=None, stderr=None, log=None,
                         cpus=1, mem=1024, disk=10240,
                         home=None,
+                        workdir=None,
                         proxy=None,
                         cmssw_version=None,
+                        conda_activate=None,
+                        conda_env=None,
                         jobflavour=None):
     ### run several similar commands within a single cluster of jobs
     # note: each command must have the same executable and number of args, only args can differ!
@@ -140,7 +146,8 @@ def submitCommandsAsCondorCluster(name, commands, stdout=None, stderr=None, log=
     [exe,argstring] = commands[0].split(' ',1) # exe must be the same for all commands
     nargs = len(argstring.split(' ')) # nargs must be the same for all commands
     # first make the executable
-    initJobScript(shname, home=home, cmssw_version=cmssw_version, proxy=proxy)
+    initJobScript(shname, home=home, workdir=workdir, cmssw_version=cmssw_version, proxy=proxy,
+      conda_activate=conda_activate, conda_env=conda_env)
     with open(shname,'a') as script:
         script.write(exe)
         script.write(' $@')
@@ -163,27 +170,20 @@ def submitCommandsAsCondorCluster(name, commands, stdout=None, stderr=None, log=
     # finally submit the job
     submitCondorJob(jdname)
 
-def submitCommandsAsCondorJob(name, commands, stdout=None, stderr=None, log=None,
-                        cpus=1, mem=1024, disk=10240, 
-                        home=None,
-                        proxy=None,
-                        cmssw_version=None,
-                        jobflavour=None):
+def submitCommandsAsCondorJob(name, commands, **kwargs):
     ### submit a set of commands as a single job
     # commands is a list of strings, each string represents a single command (executable + args)
     # the commands can be anything and are not necessarily same executable or same number of args.
-    submitCommandsAsCondorJobs(name, [commands], stdout=stdout, stderr=stderr, log=log,
-                        cpus=cpus, mem=mem, disk=disk, 
-                        home=home,
-                        proxy=proxy,
-                        cmssw_version=cmssw_version,
-                        jobflavour=jobflavour)
+    submitCommandsAsCondorJobs(name, [commands], **kwargs)
 
 def submitCommandsAsCondorJobs(name, commands, stdout=None, stderr=None, log=None,
             cpus=1, mem=1024, disk=10240,
             home=None,
+            workdir=None,
             proxy=None,
             cmssw_version=None,
+            conda_activate=None,
+            conda_env=None,
             jobflavour=None):
     ### submit multiple sets of commands as jobs (one job per set)
     # commands is a list of lists of strings, each string represents a single command
@@ -194,7 +194,8 @@ def submitCommandsAsCondorJobs(name, commands, stdout=None, stderr=None, log=Non
         shname = makeUnique(name+'.sh')
         jdname = name+'.txt'
         # first make the executable
-        initJobScript(shname, home=home, cmssw_version=cmssw_version, proxy=proxy)
+        initJobScript(shname, home=home, workdir=workdir, cmssw_version=cmssw_version, proxy=proxy,
+          conda_activate=conda_activate, conda_env=conda_env)
         with open(shname,'a') as script:
              for cmd in commandset: script.write(cmd+'\n')
         # then make the job description
