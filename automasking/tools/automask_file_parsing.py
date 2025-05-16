@@ -197,6 +197,7 @@ def automask_to_map(automasks, subsystem='BPix1'):
     elif subsystem=='BPix3': (nladders, nmodules) = (22, 4)
     elif subsystem=='BPix4': (nladders, nmodules) = (32, 4)
     else: raise Exception(f'Subsystem {subsystem} not recognized.')
+    layer = int(subsystem[-1])
 
     # make base map
     nybins = 2*(2*nladders+1)
@@ -208,7 +209,7 @@ def automask_to_map(automasks, subsystem='BPix1'):
         ycoord_base = 2*(automask[0] + nladders)
         xcoord_base = 8*(automask[1] + nmodules)
         for roc in np.arange(automask[2], automask[3]+1):
-            ycoord_relative, xcoord_relative = roc_to_coords(roc)
+            ycoord_relative, xcoord_relative = roc_to_coords(roc, layer, automask[0], automask[1])
             ycoord = ycoord_base + ycoord_relative
             xcoord = xcoord_base + xcoord_relative
             automask_map[ycoord, xcoord] = True
@@ -231,6 +232,13 @@ def map_to_automask(automask_map):
     nladders = int((automask_map.shape[0]-2)/4)
     nmodules = int((automask_map.shape[1]-8)/16)
     
+    # get the layer from the shape of the output array
+    # (needed for converting coordinates to roc number)
+    if nladders == 6: layer = 1
+    elif nladders == 14: layer = 2
+    elif nladders == 22: layer = 3
+    elif nladders == 32: layer = 4
+    
     # get the coordinates of masked ROCs
     y_coords, x_coords = np.nonzero(automask_map.astype(int))
     
@@ -241,7 +249,8 @@ def map_to_automask(automask_map):
     # for each pair of coordinates, get the corresponding ROC numbers
     y_coords_relative = y_coords % 2
     x_coords_relative = x_coords % 8
-    rocs = [coords_to_roc((y,x)) for y,x in zip(y_coords_relative, x_coords_relative)]
+    rocs = ([coords_to_roc((y,x), layer, ladder, module) for y,x,ladder,module 
+             in zip(y_coords_relative, x_coords_relative, ladders, modules)])
     
     # format the result
     res = ([[ladder, module, roc] for ladder, module, roc in zip(ladders, modules, rocs)])

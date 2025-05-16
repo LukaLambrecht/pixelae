@@ -340,10 +340,8 @@ def plot_hist_2d(hist, fig=None, ax=None, figsize=None, title=None, titlesize=No
     # - if the histogram contains only nonnegative values, values below 1e-6 will not be plotted
     #   (i.e. they will be shown as white spots in the plot) to discriminate zero from small but nonzero
     # - if the histogram contains negative values, the color axis will be symmetrized around zero.
-    # - the default behaviour of imshow() is to flip the axes w.r.t. numpy convention
-    #   (i.e. the first axis is the y-axis instead of the x-axis),
-    #   and to have the y-axis pointing downwards;
-    #   both effects are fixed by transposing the array and using the 'lower' origin keyword.
+    # - the default behaviour of imshow() is to have the y-axis pointing downwards
+    #   (i.e. origin in upper left corner); this is fixed by using the 'lower' origin keyword.
     if fig is None or ax is None: fig,ax = plt.subplots(figsize=figsize)
     
     # settings

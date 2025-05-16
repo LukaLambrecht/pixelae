@@ -67,21 +67,36 @@ def read_lumisections(path, run_numbers, ls_numbers,
                       run_column='run_number', ls_column='ls_number'):
     # warning: very slow, use only for a few lumisections
     
-    # find row indices of run and ls numbers
-    df = read_parquet(path, columns=[run_column, ls_column])
+    # convert path to list of paths to handle multiple input files
+    if isinstance(path, str): path = [path]
+        
+    # read run and lumisection numbers for each file
+    dfs = [read_parquet(p, columns=[run_column, ls_column]) for p in path]
+    
+    # loop over requested run and ls numbers
     indices = []
     for run_number, ls_number in zip(run_numbers, ls_numbers):
-        index = df.index[((df[run_column]==run_number) & (df[ls_column]==ls_number))].tolist()
+        
+        # loop over dataframes and find out in which one (if any)
+        # the requested run and lumisection number are contained
+        index = []
+        for dfidx, df in enumerate(dfs):
+            rowidx = df.index[((df[run_column]==run_number) & (df[ls_column]==ls_number))].tolist()
+            for el in rowidx: index.append((dfidx, el))
         if len(index)!=1:
             msg = f'Found unexpected list of indices corresponding to run {run_number}, LS {ls_number}, skipping.'
             print(msg)
             continue
         indices.append(index[0])
+            
+    # check if any lumisection could be found
     if len(indices)==0:
         msg = f'Found empty index list, returning None.'
         print(msg)
         return None
+    
     # read those specific rows
-    df = pd.concat([read_parquet(path, verbose=False, columns=columns, batch_size=1, first_batch=idx, last_batch=idx)
-                    for idx in indices])
+    df = pd.concat([read_parquet(path[index[0]], verbose=False, columns=columns,
+                                 batch_size=1, first_batch=index[1], last_batch=index[1])
+                                 for index in indices])
     return df
