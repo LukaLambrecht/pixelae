@@ -75,6 +75,32 @@ def get_automask_from_description(automask_description):
     return [layer, ladder, module, firstroc, lastroc]
 
 
+def automask_to_description(automask):
+    '''
+    Make an automask description as present in the txt files.
+    Input arguments:
+    - automask: a list of the following form:
+      [layer, signed ladder coordinate, signed module coordinate, first ROC number, last ROC number]
+    Returns:
+    - a string of the form "BPix_BpO_SEC4_LYR2_LDR7F_MOD4_ROC[0:3]"
+    Note: a few elements in the description are still unclear to me;
+          while they are not an issue to read the description and parse into monitoring element coordinates,
+          I'm not sure how to do the inverse operation.
+          in particular, this is about the sector number and about the F/H following the ladder number.
+          they are represented with question marks in the returned string.
+    '''
+    
+    bpm = 'Bp' if automask[2] > 0 else 'Bm'
+    io = 'I' if automask[1] > 0 else 'O'
+    lyrstr = str(automask[0])
+    ldrstr = str(abs(automask[1]))
+    modstr = str(abs(automask[2]))
+    froc = automask[3]
+    lroc = automask[4]
+    description = f'BPix_{bpm}{io}_SEC?_LYR{lyrstr}_LDR{ldrstr}?_MOD{modstr}_ROC[{froc}:{lroc}]'
+    return description
+
+
 def get_automask_from_txt(txt):
     '''
     Get automask from a txt representation.
