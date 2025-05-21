@@ -9,7 +9,7 @@ from pyarrow.parquet import ParquetFile, ParquetDataset
 
 
 def read_parquet(path, verbose=False, 
-                 columns=None, batch_size=None, first_batch=0, last_batch=0):
+                 columns=None, batch_size=None, first_batch=None, last_batch=None, batch_ids=None):
     """
     Read a parquet file into a dataframe.
     Input arguments:
@@ -29,33 +29,41 @@ def read_parquet(path, verbose=False,
             print('Found following parquet metadata:')
             print(pf.metadata)
             
-        # check internal consistency
-        if last_batch < first_batch:
-            last_batch = first_batch
-            if verbose:
-                msg = f'WARNING: setting last_batch to {last_batch}'
-                msg += ' as values smaller than first_batch are not supported.'
+        # check if contradictory arguments were provided
+        if batch_ids is not None:
+            if first_batch is not None or last_batch is not None:
+                if verbose:
+                    msg = 'WARNING in read_parquet: cannot provide both batch_ids and first_batch / last_batch;'
+                    msg += ' first_batch and last_batch will be ignored.'
+                    print(msg)
+        else:
+            if first_batch is None or last_batch is None:
+                msg = 'ERROR in read_parquet: in batched mode, either batch_ids, or first_batch and last_batch'
+                msg += ' must be provided; returning None.'
                 print(msg)
+                return None
+            if last_batch < first_batch:
+                last_batch = first_batch
+                if verbose:
+                    msg = f'WARNING in read_parquet: setting last_batch to {last_batch}'
+                    msg += ' as values smaller than first_batch are not supported.'
+                    print(msg)
+            batch_ids = list(range(first_batch, last_batch+1))
         
-        # check available rows
+        # check available rows and batches
         num_rows = pf.metadata.num_rows
-        first_row = first_batch * batch_size
-        if first_row >= num_rows:
-            msg = f'Requested to read first row {first_row},'
-            msg += f' but the data has only {num_rows} rows.'
-            raise Exception(msg)
-        first_row_last_batch = last_batch * batch_size
-        if first_row_last_batch >= num_rows:
-            last_batch = int((num_rows-1) / batch_size)
+        num_batches = int((num_rows-1)/batch_size)+1
+        if max(batch_ids) >= num_batches:
             if verbose:
-                msg = f'WARNING: setting last_batch to {last_batch}'
-                msg += f' as the data only has {num_rows} rows.'
+                msg = f'WARNING in read_parquet: batch indices greater than {num_batches-1} will be ignored.'
                 print(msg)
         
         # iterate through the batches
         iterobj = pf.iter_batches(batch_size = batch_size)
-        for counter in range(first_batch): _ = next(iterobj)
-        batches = [next(iterobj) for counter in range(last_batch+1-first_batch)]
+        batches = []
+        for batch_idx in range(num_batches):
+            batch = next(iterobj)
+            if batch_idx in batch_ids: batches.append(batch)
         df = pa.Table.from_batches(batches).to_pandas()
         
     if verbose:

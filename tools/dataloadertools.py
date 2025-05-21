@@ -36,7 +36,11 @@ class MEDataLoader(object):
         msg += f'  - {sum(self.nrows)} rows'
         print(msg)
         
-    def read_random_batch(self, batch_size=32, columns=None, batched=False):
+    def read_random_batch(self, batch_size=32, columns=None, mode='batched', num_subbatches=10):
+        # mode: choose from the following options:
+        #       - batched: partition the file in batches of size batch_size, then read one.
+        #       - subbatched: same as batched but concatenate multiple subbatches of smaller size
+        #         (slower than batched but returned data is more shuffled)
         
         # pick a random file
         # todo: maybe weight probabilities by number of rows in each file?
@@ -47,21 +51,23 @@ class MEDataLoader(object):
         if batch_size >= nrows:
             return iotools.read_parquet(self.parquet_files[file_idx], columns=columns)
         
-        # make random start index
-        if not batched:
-            # case 1: fully random start index (can be slow)
-            max_start_idx = nrows - batch_size
-            start_idx = self.rng.integers(0, high=max_start_idx, endpoint=True)
-            stop_idx = start_idx + batch_size
-            return iotools.read_parquet(self.parquet_files[file_idx], columns=columns,
-                                        batch_size=1, first_batch=start_idx, last_batch=stop_idx-1)
-        else:
-            # case 2: partition the file in provided batch size and pick one (much faster)
+        # handle different modes
+        if mode=='batched':
+            # partition the file in provided batch size and pick one
             max_first_batch = int((nrows-1)/batch_size)
             first_batch = self.rng.integers(0, high=max_first_batch, endpoint=True)
             last_batch = first_batch
             return iotools.read_parquet(self.parquet_files[file_idx], columns=columns,
                                         batch_size=batch_size, first_batch=first_batch, last_batch=last_batch)
+        elif mode=='subbatched':
+            # partition the file in smaller subbatches and concatenate a few
+            # to make a single batch of size batch_size
+            subbatch_size = int(batch_size / num_subbatches)
+            max_subbatch_idx = int((nrows-1)/subbatch_size)
+            replace = True if num_subbatches > max_subbatch_idx+1 else False
+            subbatch_ids = self.rng.choice(np.arange(max_subbatch_idx+1), size=num_subbatches, replace=replace)
+            return iotools.read_parquet(self.parquet_files[file_idx], columns=columns,
+                                        batch_size=subbatch_size, batch_ids=subbatch_ids)
         
     def read_sequential_batches(self, batch_size=32, columns=None):
         for file_idx, file in enumerate(self.parquet_files):

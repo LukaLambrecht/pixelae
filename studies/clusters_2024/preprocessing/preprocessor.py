@@ -129,7 +129,7 @@ class PreProcessor(object):
                 self.mask = np.delete(self.mask, slicex, axis=1)
             
     
-    def preprocess(self, df, verbose=False):
+    def preprocess(self, df, **kwargs):
         '''
         Preprocess the data in a dataframe.
         Input arguments:
@@ -142,6 +142,14 @@ class PreProcessor(object):
         mes, runs, lumis = dftools.get_mes(df,
                             xbinscolumn='x_bin', ybinscolumn='y_bin',
                             runcolumn='run_number', lumicolumn='ls_number')
+        
+        # do preprocessing
+        return self.preprocess_mes(mes, runs, lumis, **kwargs)
+
+        
+    def preprocess_mes(self, mes, runs, lumis, verbose=False):
+        
+        # initialize info for later printing
         preprocessing_info = {'run_number': runs, 'ls_number': lumis}
     
         # remove empty cross
@@ -179,6 +187,7 @@ class PreProcessor(object):
         
         # return the mes
         return mes
+    
     
     def deprocess(self, mes, runs=None, lumis=None):
         '''
