@@ -75,3 +75,16 @@ class MEDataLoader(object):
             for batch_idx in range(nbatches):
                 yield iotools.read_parquet(file, columns=columns, batch_size=batch_size,
                         first_batch=batch_idx, last_batch=batch_idx)
+                
+    def prepare_sequential_batches(self, batch_size=32):
+        res = []
+        for file_idx, file in enumerate(self.parquet_files):
+            nbatches = int((self.nrows[file_idx]-1)/batch_size)+1
+            for batch_idx in range(nbatches): res.append((file_idx, batch_size, batch_idx))
+        return res
+                
+    def read_sequential_batch(self, batch_params, columns=None):
+        file_idx, batch_size, batch_idx = batch_params
+        file = self.parquet_files[file_idx]
+        return iotools.read_parquet(file, columns=columns, batch_size=batch_size,
+                  first_batch=batch_idx, last_batch=batch_idx)

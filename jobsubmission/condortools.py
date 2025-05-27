@@ -114,12 +114,20 @@ def makeJobDescription(name, exe, argstring=None,
 
 def submitCondorJob(jobDescription):
     ### submit a job description file as a condor job
+    
+    # check if file exists
     fname = os.path.splitext(jobDescription)[0]+'.txt'
     if not os.path.exists(fname):
         print('ERROR: job description file {} not found'.format(fname))
         sys.exit()
-    # maybe later extend this part to account for failed submissions etc!
-    os.system('condor_submit {}'.format(fname))
+
+    # check if need to move to another directory
+    jddir, fname = os.path.split(fname)
+    if len(jddir) > 0: cmd = f'cd {jddir}; condor_submit {fname}'
+    else: cmd = f'condor_submit {fname}'
+
+    # run the condor_submit command
+    os.system(cmd)
 
 def submitCommandAsCondorJob(name, command, **kwargs):
     ### submit a single command as a single job
