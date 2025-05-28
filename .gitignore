@@ -1,5 +1,7 @@
 # ignore all .pyc files
+# and pycache folders
 **.pyc
+**__pycache__/
 
 # ignore notebook version files
 **.sys.v#*

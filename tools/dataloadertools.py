@@ -28,7 +28,10 @@ class MEDataLoader(object):
                 raise Exception(msg)
                 
         # read number of rows per file
-        self.nrows = ([len(iotools.read_parquet(f, columns=[self.run_column])) for f in self.parquet_files])
+        self.nrows = []
+        for f in self.parquet_files:
+            this_nrows = len(iotools.read_parquet(f, columns=[self.run_column]))
+            self.nrows.append(this_nrows)
         
         # printouts
         msg = 'Initialized MEDataLoader object\n'
@@ -49,7 +52,8 @@ class MEDataLoader(object):
         
         # handle case where the batch contains the full file
         if batch_size >= nrows:
-            return iotools.read_parquet(self.parquet_files[file_idx], columns=columns)
+            df = iotools.read_parquet(self.parquet_files[file_idx], columns=columns)
+            return df
         
         # handle different modes
         if mode=='batched':
@@ -59,6 +63,7 @@ class MEDataLoader(object):
             last_batch = first_batch
             return iotools.read_parquet(self.parquet_files[file_idx], columns=columns,
                                         batch_size=batch_size, first_batch=first_batch, last_batch=last_batch)
+        
         elif mode=='subbatched':
             # partition the file in smaller subbatches and concatenate a few
             # to make a single batch of size batch_size

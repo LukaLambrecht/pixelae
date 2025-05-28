@@ -89,3 +89,21 @@ def read_lumisections(path, run_numbers, ls_numbers,
     df = ds.read().to_pandas()
         
     return df
+
+
+def read_runs(path, run_numbers,
+              verbose=False, columns=None,
+              run_column='run_number'):
+    """
+    Read specific runs from a file or list of files
+    """
+    
+    # make filter
+    runfilter = []
+    runfilter.append( [(run_column, 'in', run_numbers)] )
+    
+    # read dataframe
+    ds = ParquetDataset(path, filters=runfilter)
+    df = ds.read().to_pandas()
+        
+    return df
