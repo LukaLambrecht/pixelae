@@ -26,3 +26,12 @@ The retrieval and parsing of the input data is not within the scope of this repo
 but here are some useful links:
 - For data retrieval from DIALS \[[1](https://cmsdials.web.cern.ch/?ws=tracker), [2](https://gitlab.cern.ch/cms-dqmdc/services/dials-service)\] (recommended), see [dialstools/datasets](https://github.com/LukaLambrecht/dialstools/tree/main/datasets).
 - For data retrieval directly from the DQMIO datasets centrally maintained by CMS (no longer recommended but might work as backup), see [dqmiotools/datasets](https://github.com/LukaLambrecht/dqmiotools/tree/main/datasets).
+
+### How to run
+Most of the code runs in the form of IPython notebooks (e.g. on SWAN).
+Some dependencies might not be installed by default on SWAN (to double check, it has been a while),
+but in that case they should be easily installable by `pip install <package name>` in the SWAN terminal.
+
+The python scripts (e.g. for HTCondor job submission) run on `lxplus`,
+(after sourcing a relatively recent CMSSW version to have at least most dependencies available;
+I used `CMSSW_14_1_0_pre4` but the exact version shouldn't matter).
