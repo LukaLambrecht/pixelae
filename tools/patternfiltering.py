@@ -14,6 +14,9 @@ def contains_pattern(hists, pattern, mask=None, threshold=1e-3):
     - 1D boolean array (same length as hists).
     """
     
+    # parse threshold
+    if threshold is None: threshold = 1e-3
+    
     # convert to np array
     hists = np.array(hists)
     
@@ -46,6 +49,9 @@ def filter_pattern(hists, pattern, threshold=1e-3):
       with True for each pixel that belongs to the pattern,
       and False elsewhere.
     """
+    
+    # parse threshold
+    if threshold is None: threshold = 1e-3
     
     # convert to np array
     hists = np.array(hists)
