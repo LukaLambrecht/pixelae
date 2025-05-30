@@ -45,29 +45,43 @@ def load_nmfs(nmf_file_dict):
         for layer, modelfile in layers.items(): nmfs[era][layer] = joblib.load(modelfile)
     return nmfs
         
-
-def run_evaluation_batch(batch_paramset, dataloaders, preprocessors, nmfs,
-                         batch_size = 1000,
-                         threshold = 0.1,
-                         flag_patterns = None,
-                         do_per_layer_cleaning = False,
-                         cleaning_patterns = None,
-                         cleaning_threshold = None,
-                         do_automasking = False,
-                         automask_reader = None,
-                         automask_map_preprocessors = None,
-                         do_loss_masking = False,
-                         loss_masks = None,
-                         loss_mask_preprocessors = None):
+def run_evaluation_batch(batch_paramset, dataloaders, nmfs, **kwargs):
     
     # initializations
-    start_time = time.time()
-    layers = list(dataloaders.keys())
+    start_tim = time.time()
     
     # get the dataframes
     dfs = {}
+    layers = list(dataloaders.keys())
     for layer in layers:
         dfs[layer] = dataloaders[layer].read_sequential_batch(batch_paramset)
+    
+    # run the evaluation on this data
+    flagged_run_numbers, flagged_ls_numbers = run_evaluation(dfs, nmfs, **kwargs)
+    
+    # calculate time spent for this batch
+    end_time = time.time()
+    print('    Time for this batch: {:.2f}s'.format(end_time-start_time))
+    
+    # return the result
+    return flagged_run_numbers, flagged_ls_numbers
+    
+def run_evaluation(dfs, nmfs,
+                     preprocessors = None,
+                     threshold = 0.1,
+                     flag_patterns = None,
+                     do_per_layer_cleaning = False,
+                     cleaning_patterns = None,
+                     cleaning_threshold = None,
+                     do_automasking = False,
+                     automask_reader = None,
+                     automask_map_preprocessors = None,
+                     do_loss_masking = False,
+                     loss_masks = None,
+                     loss_mask_preprocessors = None):
+    
+    # initializations
+    layers = list(dfs.keys())
     
     # filtering
     ndf = len(dfs[layers[0]])
@@ -80,10 +94,14 @@ def run_evaluation_batch(batch_paramset, dataloaders, preprocessors, nmfs,
     if ndfnew==0: return ([], [])
         
     # do preprocessing
-    print('    Preprocessing...')
     mes_preprocessed = {}
-    for layer in layers:
-        mes_preprocessed[layer] = preprocessors[layer].preprocess(dfs[layer])
+    if preprocessors is not None:
+        print('    Preprocessing...')
+        for layer in layers: mes_preprocessed[layer] = preprocessors[layer].preprocess(dfs[layer])
+    else:
+        for layer in layers: mes_preprocessed[layer], _, _ = dftools.get_mes(df,
+                                       xbinscolumn='x_bin', ybinscolumn='y_bin',
+                                       runcolumn='run_number', lumicolumn='ls_number')
     
     # do evaluation and apply threhold to loss map
     print('    Evaluating...')
@@ -106,7 +124,7 @@ def run_evaluation_batch(batch_paramset, dataloaders, preprocessors, nmfs,
 
     # optional: do loss masking
     if do_loss_masking:
-        print('   Applying loss mask...')
+        print('    Applying loss mask...')
         for layer in layers:
             mask = loss_masks[layer]
             mask = np.expand_dims(mask, 0)
@@ -147,10 +165,6 @@ def run_evaluation_batch(batch_paramset, dataloaders, preprocessors, nmfs,
     del dfs
     del mes_preprocessed
     del losses_binary
-    
-    # calculate time spent for this batch
-    end_time = time.time()
-    print('    Time for this batch: {:.2f}s'.format(end_time-start_time))
 
     # return the result
     return flagged_run_numbers, flagged_ls_numbers
@@ -214,8 +228,8 @@ def evaluate(config):
         # run over batches
         for batchidx, batch_paramset in enumerate(batch_params):
             print(f'  Batch {batchidx+1}...')
-            batch_results = run_evaluation_batch(batch_paramset, dataloaders[era], preprocessors[era], nmfs[era],
-                                                 batch_size = batch_size,
+            batch_results = run_evaluation_batch(batch_paramset, dataloaders[era], nmfs[era],
+                                                 preprocessors = preprocessors[era],
                                                  threshold = threshold,
                                                  flag_patterns = flag_patterns,
                                                  do_per_layer_cleaning = do_per_layer_cleaning,
