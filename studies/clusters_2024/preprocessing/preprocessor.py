@@ -12,13 +12,29 @@ import tools.dftools as dftools
 import tools.omstools as omstools
 
 
+def get_metype(metag):
+    # set metype based on provided input
+    # (multiple naming conventions supported)
+    if( isinstance(metag, int) or len(metag)==1 ):
+        metype = f'PXLayer_{metag}'
+    elif metag.lower().startswith('bpix') or metag.lower().startswith('pxlayer'):
+        metype = f'PXLayer_{metag[-1]}'
+    elif metag.lower().startswith('fpix') or metag.lower().startswith('pxdisk'):
+        metype = f'PXDisk_{metag[-2:]}'
+    else:
+        raise Exception(f'ME tag "{metag}" not recognized.')
+    return metype
+
+
 def make_default_preprocessor(era, layer):
+    
+    # set metype based on layer
+    metype = get_metype(layer)
 
     # set directory to normalization data
     normdata_dir = os.path.join(os.path.dirname(__file__), 'normdata')
 
     # load norm json
-    metype = f'PXLayer_{layer}'
     normfile = os.path.join(normdata_dir, f'normdata_Run2024{era}_{metype}.json')
     with open(normfile, 'r') as f:
         norm_info = json.load(f)
@@ -49,7 +65,7 @@ class PreProcessor(object):
         '''
         Input arguments:
         - metype: type of ME.
-          currently supported values: "PXLayer_[1, 2, 3, 4]".
+          currently supported values: "PXLayer_[1, 2, 3, 4]" or "BPix[1, 2, 3, 4]"
         - global_norm: dict of the following form:
             {"run_number": [...],
              "lumisection_number": [...],
@@ -65,12 +81,7 @@ class PreProcessor(object):
         '''
         
         # copy metype attribute
-        self.metype = metype
-        metypes = ['PXLayer_1', 'PXLayer_2', 'PXLayer_3', 'PXLayer_4']
-        if not self.metype in metypes:
-            msg = f'ME type "{self.metype}" not recognized;'
-            msg += f' choose from {metypes}.'
-            raise Exception(msg)
+        self.metype = get_metype(metype)
             
         # set cropping properties based on type of ME
         self.anticrop = None

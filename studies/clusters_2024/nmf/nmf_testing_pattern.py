@@ -15,6 +15,7 @@ thisdir = os.getcwd()
 topdir = os.path.abspath(os.path.join(thisdir, '../../../'))
 sys.path.append(topdir)
 from tools.dataloadertools import MEDataLoader
+from tools.omstools import find_oms_attr_for_lumisections
 import tools.patternfiltering as patternfiltering
 import tools.rebinning as rebinning
 from automasking.tools.automaskreader import AutomaskReader
@@ -23,6 +24,8 @@ from studies.clusters_2024.preprocessing.preprocessor import make_default_prepro
 
 
 def make_dataloaders(input_file_dict):
+    # make a dataloader for each (set of) input file(s).
+    # input and output are both 2-layer dicts of the form era -> layer -> input file / dataloader.
     dataloaders = {}
     for era, layers in input_file_dict.items():
         dataloaders[era] = {}
@@ -30,6 +33,9 @@ def make_dataloaders(input_file_dict):
     return dataloaders
         
 def make_preprocessors(eras, layers):
+    # make a preprocessor for all eras and layers.
+    # input are lists of eras and layers.
+    # output is a 2-layer dict of the form era -> layer -> preprocessor.
     preprocessors = {}
     for era in eras:
         preprocessors[era] = {}
@@ -39,6 +45,8 @@ def make_preprocessors(eras, layers):
     return preprocessors    
 
 def load_nmfs(nmf_file_dict):
+    # load and NMF model from each input file.
+    # input and output are both 2-layer dicts of the form era -> layer -> stored nmf model file / loaded nmf model.
     nmfs = {}
     for era, layers in nmf_file_dict.items():
         nmfs[era] = {}
@@ -46,9 +54,11 @@ def load_nmfs(nmf_file_dict):
     return nmfs
         
 def run_evaluation_batch(batch_paramset, dataloaders, nmfs, **kwargs):
+    # run evaluation on a single batch.
+    # helper function to evaluate(), see below.
     
     # initializations
-    start_tim = time.time()
+    start_time = time.time()
     
     # get the dataframes
     dfs = {}
@@ -57,17 +67,65 @@ def run_evaluation_batch(batch_paramset, dataloaders, nmfs, **kwargs):
         dfs[layer] = dataloaders[layer].read_sequential_batch(batch_paramset)
     
     # run the evaluation on this data
-    flagged_run_numbers, flagged_ls_numbers = run_evaluation(dfs, nmfs, **kwargs)
+    output = run_evaluation(dfs, nmfs, **kwargs)
     
     # calculate time spent for this batch
     end_time = time.time()
     print('    Time for this batch: {:.2f}s'.format(end_time-start_time))
     
     # return the result
-    return flagged_run_numbers, flagged_ls_numbers
+    return output
+
+def filter_dfs(dfs,
+               min_entries_filter = None,
+               oms_filters = None):
+    '''
+    Filter a set of dataframes.
+    Input arguments:
+    - dfs: dict of dataframes of the form layer -> dataframe
+    - min_entries_filter: dict of the form layer -> miminum number of entries per LS
+      (requires each dataframe to have a column "entries" in it).
+    - oms_filters: dict in OMS format, of the following form:
+      {"run_number": [<run numbers>], "lumisection_number": [<lumisection numbers>],
+       "<filter name 1>": [<booleans>], "<filter name 2>": [<booleans>], ...}
+    '''
+    
+    # initializations
+    filter_results = {}
+    layers = list(dfs.keys())
+    run_numbers = dfs[layers[0]]['run_number'].values
+    ls_numbers = dfs[layers[0]]['ls_number'].values
+    combined_mask = np.ones(len(dfs[layers[0]])).astype(bool)
+    
+    # minimum number of entries filter
+    if min_entries_filter is not None:
+        for layer in layers:
+            threshold = min_entries_filter[layer]
+            mask = (dfs[layer]['entries'] > threshold)
+            # add to the total mask
+            combined_mask = ((combined_mask) & (mask))
+            # keep track of lumisections that fail
+            fail = [(run, ls) for run, ls in zip(run_numbers[~mask], ls_numbers[~mask])]
+            filter_results[f'min_entries_{layer}'] = fail
+            
+    # OMS attribute filters
+    if oms_filters is not None:
+        oms_filter_keys = [key for key in oms_filters.keys() if (key!='run_number' and key!='lumisection_number')]
+        for key in oms_filter_keys:
+            mask = find_oms_attr_for_lumisections(run_numbers, ls_numbers, oms_filters, key)
+            # add to the total mask
+            combined_mask = ((combined_mask) & (mask))
+            # keep track of lumisections that fail
+            fail = [(run, ls) for run, ls in zip(run_numbers[~mask], ls_numbers[~mask])]
+            filter_results[key] = fail
+    
+    # return results
+    return (combined_mask, filter_results)
     
 def run_evaluation(dfs, nmfs,
                      preprocessors = None,
+                     min_entries_filter = None,
+                     oms_filters = None,
                      threshold = 0.1,
                      flag_patterns = None,
                      do_per_layer_cleaning = False,
@@ -85,13 +143,26 @@ def run_evaluation(dfs, nmfs,
     
     # filtering
     ndf = len(dfs[layers[0]])
-    mask = np.ones(ndf).astype(bool)
-    for layer in layers: mask = (mask & (dfs[layer]['entries'] > (0.5e6/int(layer))))
+    mask, filter_results = filter_dfs(dfs,
+                             min_entries_filter=min_entries_filter,
+                             oms_filters=oms_filters)
     for layer in layers:
         dfs[layer] = dfs[layer][mask]
     ndfnew = len(dfs[layers[0]])    
     print(f'    Found {ndfnew} / {ndf} instances passing filters.')
-    if ndfnew==0: return ([], [])
+    
+    # only for testing: print filter results
+    # (decide how to handle more systematically later)
+    #print(filter_results)
+    
+    # safety for 0 instances passing filters
+    if ndfnew==0:
+        res = {
+            'flagged_run_numbers': [],
+            'flagged_ls_numbers': [],
+            'filter_results': filter_results
+        }
+        return res
         
     # do preprocessing
     mes_preprocessed = {}
@@ -167,7 +238,13 @@ def run_evaluation(dfs, nmfs,
     del losses_binary
 
     # return the result
-    return flagged_run_numbers, flagged_ls_numbers
+    res = {
+        'flagged_run_numbers': flagged_run_numbers,
+        'flagged_ls_numbers': flagged_ls_numbers,
+        'filter_results': filter_results
+    }
+    return res
+
 
 def evaluate(config):
         
@@ -189,7 +266,17 @@ def evaluate(config):
     cleaning_threshold = config['cleaning_threshold']
     do_automasking = config['do_automasking']
     do_loss_masking = config['do_loss_masking']
-    
+
+    # read filters if needed
+    min_entries_filter = config['min_entries_filter'] if 'min_entries_filter' in config.keys() else None
+    oms_filters = None
+    if 'oms_filter_keys' in config.keys():
+        oms_filters = {}
+        for era in eras:
+            with open(config['oms_filter_files'][era], 'r') as f:
+                oms_filters[era] = json.load(f)
+            oms_filters[era] = {key: val for key, val in oms_filters[era].items() if key in config['oms_filter_keys']}
+
     # make automask reader if needed
     automask_reader = None
     automask_map_preprocessors = None
@@ -216,6 +303,7 @@ def evaluate(config):
     # initialize result
     flagged_run_numbers = []
     flagged_ls_numbers = []
+    batch_filter_results = []
     
     # loop over eras
     for era in eras:
@@ -230,6 +318,8 @@ def evaluate(config):
             print(f'  Batch {batchidx+1}...')
             batch_results = run_evaluation_batch(batch_paramset, dataloaders[era], nmfs[era],
                                                  preprocessors = preprocessors[era],
+                                                 min_entries_filter = min_entries_filter,
+                                                 oms_filters = oms_filters[era],
                                                  threshold = threshold,
                                                  flag_patterns = flag_patterns,
                                                  do_per_layer_cleaning = do_per_layer_cleaning,
@@ -241,20 +331,34 @@ def evaluate(config):
                                                  do_loss_masking = do_loss_masking,
                                                  loss_masks = loss_masks[era],
                                                  loss_mask_preprocessors = loss_mask_preprocessors)
-            if batch_results is not None and len(batch_results[0]) > 0:
-                flagged_run_numbers.append(batch_results[0])
-                flagged_ls_numbers.append(batch_results[1])
+            if batch_results is not None:
+                batch_filter_results.append(batch_results['filter_results'])
+                if len(batch_results['flagged_run_numbers'])>0:
+                    flagged_run_numbers.append(batch_results['flagged_run_numbers'])
+                    flagged_ls_numbers.append(batch_results['flagged_ls_numbers'])
                 
             # break after one era for testing
             #break
 
     # contatenate the result
+    filter_results = {}
+    if len(batch_filter_results)>0:
+        for key in batch_filter_results[0].keys():
+            filter_results[key] = sum([batch_filter_result[key] for batch_filter_result in batch_filter_results], [])
     if len(flagged_run_numbers) > 0:
         flagged_run_numbers = np.concatenate(flagged_run_numbers)
         flagged_ls_numbers = np.concatenate(flagged_ls_numbers)
+    else:
+        flagged_run_numbers = np.array([])
+        flagged_ls_numbers = np.array([])
         
     # return the result
-    return flagged_run_numbers, flagged_ls_numbers
+    res = {
+        'flagged_run_numbers': flagged_run_numbers,
+        'flagged_ls_numbers': flagged_ls_numbers,
+        'filter_results': filter_results
+    }
+    return res
         
         
 if __name__=='__main__':
@@ -265,11 +369,16 @@ if __name__=='__main__':
         config = json.load(f)
         
     # do evaluation
-    flagged_run_numbers, flagged_ls_numbers = evaluate(config)
+    output = evaluate(config)
     
-    # write output
-    output = {'flagged_run_numbers': flagged_run_numbers.tolist(), 
-              'flagged_ls_numbers': flagged_ls_numbers.tolist()}
+    # parsing for json compatibility
+    output['flagged_run_numbers'] = output['flagged_run_numbers'].tolist() 
+    output['flagged_ls_numbers'] = output['flagged_ls_numbers'].tolist()
+    for key, lslist in output['filter_results'].items():
+        for idx, (run, lumi) in enumerate(lslist):
+            lslist[idx] = (int(run), int(lumi))
+
+    # write output file
     outputfile = config['outputfile']
     outputdir = os.path.dirname(outputfile)
     if not os.path.exists(outputdir): os.makedirs(outputdir)
