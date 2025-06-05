@@ -15,16 +15,19 @@ sys.path.append(topdir)
 import plotting.plottools as plottools
 
 
-def plot_cluster_occupancy(hist, fig=None, ax=None,
+def plot_cluster_occupancy(hist, fig=None, ax=None, fast=False,
                            xaxtitlesize=None, yaxtitlesize=None,
                            **kwargs):
     
     # make base plot
     fig, ax = plottools.plot_hist_2d(hist,
                 # fixed arguments
-                extent=None, aspect=None, origin='lower',
+                fig=fig, ax=ax, extent=None, aspect=None, origin='lower',
                 # modifiable arguments
                 **kwargs)
+    
+    # for faster plotting, don't bother with further aesthetics
+    if fast: return fig, ax
     
     # automatically determine x-axis labels from number of bins
     nxbins = hist.shape[1]
@@ -69,6 +72,12 @@ def plot_cluster_occupancy(hist, fig=None, ax=None,
         yaxticklabels = np.concatenate((np.arange(-nladders, 0), np.arange(1, nladders+1)))
     # FPix: to do later
     else: raise Exception('Number of y-bins not recognized.')
+        
+    # subsample y-axis labels (else they are typically overlapping)
+    stepdict = {6: 2, 14: 2, 22: 4, 32: 4}
+    step = stepdict.get(nladders, 1)
+    yaxticks = yaxticks[0::step]
+    yaxticklabels = yaxticklabels[0::step]
         
     # y-axis layout
     ax.set_ylabel(yaxtitle, fontsize=yaxtitlesize)

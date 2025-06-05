@@ -126,8 +126,9 @@ def run_evaluation(dfs, nmfs,
                      preprocessors = None,
                      min_entries_filter = None,
                      oms_filters = None,
-                     threshold = 0.1,
-                     flag_patterns = None,
+                     loss_threshold = 0.1,
+                     flagging_patterns = None,
+                     flagging_threshold = None,
                      do_per_layer_cleaning = False,
                      cleaning_patterns = None,
                      cleaning_threshold = None,
@@ -180,7 +181,7 @@ def run_evaluation(dfs, nmfs,
     for layer in layers:
         mes_pred = nmfs[layer].predict(mes_preprocessed[layer])
         losses = np.square(mes_preprocessed[layer] - mes_pred)
-        losses_binary[layer] = (losses > threshold).astype(int)
+        losses_binary[layer] = (losses > loss_threshold).astype(int)
     
     # optional: do automasking
     if do_automasking:
@@ -208,7 +209,7 @@ def run_evaluation(dfs, nmfs,
         for layer in layers:
             losses_binary[layer] = patternfiltering.filter_any_pattern(
               losses_binary[layer],
-              cleaning_patterns,
+              cleaning_patterns[layer],
               threshold = cleaning_threshold)
         
     # overlay different layers
@@ -224,7 +225,8 @@ def run_evaluation(dfs, nmfs,
     
     # search for patterns in the combined loss
     print('    Searching for patterns in the loss map...')
-    flags = patternfiltering.contains_any_pattern(losses_binary_combined, flag_patterns)
+    flags = patternfiltering.contains_any_pattern(losses_binary_combined, flagging_patterns,
+              threshold = flagging_threshold)
     
     # store the flagged lumisections
     flagged_run_numbers = dfs[layers[0]]['run_number'].values[flags]
@@ -259,10 +261,11 @@ def evaluate(config):
     
     # get evaluation settings
     batch_size = config['batch_size']
-    threshold = config['threshold']
-    flag_patterns = [np.array(el) for el in config['flag_patterns']]
+    loss_threshold = config['loss_threshold']
+    flagging_patterns = [np.array(el) for el in config['flagging_patterns']]
+    flagging_threshold = config['flagging_threshold']
     do_per_layer_cleaning = config['do_per_layer_cleaning']
-    cleaning_patterns = [np.array(el) for el in config['cleaning_patterns']]
+    cleaning_patterns = {key: [np.array(el) for el in val] for key, val in config['cleaning_patterns'].items()}
     cleaning_threshold = config['cleaning_threshold']
     do_automasking = config['do_automasking']
     do_loss_masking = config['do_loss_masking']
@@ -294,9 +297,9 @@ def evaluate(config):
         for era in eras:
             loss_masks[era] = {}
             for layer in layers:
-                loss_mask_file = config['loss_mask_files'][era][layer]
+                loss_mask_file = config['loss_masking_zero_frac_files'][era][layer]
                 loss_mask = np.load(loss_mask_file)
-                loss_mask = (loss_mask < 0.9)
+                loss_mask = (loss_mask < config['loss_masking_zero_frac_threshold'])
                 loss_masks[era][layer] = loss_mask
         for layer in layers: loss_mask_preprocessors[layer] = PreProcessor(f'PXLayer_{layer}')
 
@@ -320,8 +323,9 @@ def evaluate(config):
                                                  preprocessors = preprocessors[era],
                                                  min_entries_filter = min_entries_filter,
                                                  oms_filters = oms_filters[era],
-                                                 threshold = threshold,
-                                                 flag_patterns = flag_patterns,
+                                                 loss_threshold = loss_threshold,
+                                                 flagging_patterns = flagging_patterns,
+                                                 flagging_threshold = flagging_threshold,
                                                  do_per_layer_cleaning = do_per_layer_cleaning,
                                                  cleaning_patterns = cleaning_patterns,
                                                  cleaning_threshold = cleaning_threshold,
@@ -329,7 +333,7 @@ def evaluate(config):
                                                  automask_reader = automask_reader,
                                                  automask_map_preprocessors = automask_map_preprocessors,
                                                  do_loss_masking = do_loss_masking,
-                                                 loss_masks = loss_masks[era],
+                                                 loss_masks = None if loss_masks is None else loss_masks[era],
                                                  loss_mask_preprocessors = loss_mask_preprocessors)
             if batch_results is not None:
                 batch_filter_results.append(batch_results['filter_results'])

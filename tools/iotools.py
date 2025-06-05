@@ -73,37 +73,73 @@ def read_parquet(path, verbose=False,
 
 def read_lumisections(path, run_numbers, ls_numbers,
                       verbose=False, columns=None,
-                      run_column='run_number', ls_column='ls_number'):
+                      run_column='run_number', ls_column='ls_number',
+                      mode='pyarrow'):
     """
     Read specific lumisections from a file or list of files
     Note: can be slow, do not use for many lumisections.
     """
     
-    # make filter
-    lsfilter = []
-    for run_number, ls_number in zip(run_numbers, ls_numbers):
-        lsfilter.append( [(run_column, '=', run_number), (ls_column, '=', ls_number)] )
+    if mode=='pyarrow':
+        # make filter
+        lsfilter = []
+        for run_number, ls_number in zip(run_numbers, ls_numbers):
+            lsfilter.append( [(run_column, '=', run_number), (ls_column, '=', ls_number)] )
     
-    # read dataframe
-    ds = ParquetDataset(path, filters=lsfilter)
-    df = ds.read().to_pandas()
+        # read dataframe
+        ds = ParquetDataset(path, filters=lsfilter)
+        df = ds.read().to_pandas()
+        
+    elif mode=='polars':
+        # make filter
+        lsfilter = ((polars.col(run_column) == run_numbers[0]) & (polars.col(ls_column) == ls_numbers[0]))
+        for run_number, ls_number in zip(run_numbers[1:], ls_numbers[1:]):
+            lsfilter = (lsfilter) | ((polars.col(run_column) == run_number) & (polars.col(ls_column) == ls_number))
+        
+        # read dataframe
+        df = polars.scan_parquet(path).filter(lsfilter).collect().to_pandas()
+        
+    elif mode=='batched':
+        # find indices of lumisections
+        dftemp = read_parquet(path, columns=[run_column, ls_column])
+        run_nbs = dftemp[run_column].values
+        ls_nbs = dftemp[ls_column].values
+        ids = []
+        for run_number, ls_number in zip(run_numbers, ls_numbers):
+            ids.append( np.nonzero((run_nbs==run_number) & (ls_nbs==ls_number))[0][0] )
+        
+        # read dataframe
+        df = read_parquet(path, batch_size=1, batch_ids=ids)
+        
+    else: raise Exception(f'Mode {mode} not recognized.')
         
     return df
 
 
 def read_runs(path, run_numbers,
               verbose=False, columns=None,
-              run_column='run_number'):
+              run_column='run_number',
+              mode='pyarrow'):
     """
     Read specific runs from a file or list of files
     """
     
-    # make filter
-    runfilter = []
-    runfilter.append( [(run_column, 'in', run_numbers)] )
+    if mode=='pyarrow':
+        # make filter
+        runfilter = []
+        runfilter.append( [(run_column, 'in', run_numbers)] )
     
-    # read dataframe
-    ds = ParquetDataset(path, filters=runfilter)
-    df = ds.read().to_pandas()
+        # read dataframe
+        ds = ParquetDataset(path, filters=runfilter)
+        df = ds.read().to_pandas()
+        
+    elif mode=='polars':
+        # make filter
+        runfilter = polars.col(run_column).isin(run_numbers)
+        
+        # read dataframe
+        df = polars.scan_parquet(path).filter(runfilter).collect().to_pandas()
+        
+    else: raise Exception(f'Mode {mode} not recognized.')
         
     return df

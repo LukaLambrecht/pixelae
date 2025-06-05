@@ -31,7 +31,7 @@ if __name__=='__main__':
         'I-v1',
         'I-v2',
     ])
-    layers = [3, 4]
+    layers = [4]
     outputdir = 'output_test'
     runmode = 'condor'
 
