@@ -26,33 +26,62 @@ def get_metype(metag):
     return metype
 
 
-def make_default_preprocessor(era, layer):
+def make_default_preprocessor(era, layer,
+                             global_normalization = 'norm',
+                             local_normalization = 'avg'):
+    '''
+    Input arguments:
+    - global_normalization: choose from the following:
+        - None: no global normalization.
+        - "norm": normalize by pileup and trigger rate.
+        - "avg": set the average value to 1.
+    - local_normalization: choose from the following:
+        - None: no local normalization.
+        - "avg": normalize by average ME.
+    '''
     
     # set metype based on layer
     metype = get_metype(layer)
-
+    
     # set directory to normalization data
     normdata_dir = os.path.join(os.path.dirname(__file__), 'normdata')
 
-    # load norm json
-    normfile = os.path.join(normdata_dir, f'normdata_Run2024{era}_{metype}.json')
-    with open(normfile, 'r') as f:
-        norm_info = json.load(f)
-    
-    # divide the norm by the number of bins in order to normalize mean instead of sum
-    if metype=='PXLayer_1': shape = (26, 72)
-    elif metype=='PXLayer_2': shape = (58, 72)
-    elif metype=='PXLayer_3': shape = (90, 72)
-    elif metype=='PXLayer_4': shape = (130, 72)
-    nbins = shape[0] * shape[1]
-    norm_info['norm'] = [val / nbins for val in norm_info['norm']]
+    # settings for global normalization
+    norm_info = None
+    avgunity = False
+    if global_normalization is None: pass
+    elif global_normalization=='norm':
 
-    # get the average occupancy map
-    avgmefile = os.path.join(normdata_dir, f'avgme_Run2024{era}_{metype}.npy')
-    avgme = np.load(avgmefile)
+        # load norm json
+        normfile = os.path.join(normdata_dir, f'normdata_Run2024{era}_{metype}.json')
+        with open(normfile, 'r') as f:
+            norm_info = json.load(f)
+    
+        # divide the norm by the number of bins in order to normalize mean instead of sum
+        if metype=='PXLayer_1': shape = (26, 72)
+        elif metype=='PXLayer_2': shape = (58, 72)
+        elif metype=='PXLayer_3': shape = (90, 72)
+        elif metype=='PXLayer_4': shape = (130, 72)
+        nbins = shape[0] * shape[1]
+        norm_info['norm'] = [val / nbins for val in norm_info['norm']]
+        
+    elif global_normalization=='avg': avgunity = True
+    else:
+        raise Exception(f'Global normalization "{global_normalization}" not recognized.')
+
+    # settings for local normalization
+    avgme = None
+    if local_normalization is None: pass
+    elif local_normalization=='avg':
+        
+        # get the average occupancy map
+        avgmefile = os.path.join(normdata_dir, f'avgme_Run2024{era}_{metype}.npy')
+        avgme = np.load(avgmefile)
+    else:
+        raise Exception(f'Local normalization "{local_normalization}" not recognized.')
 
     # make a preprocessor
-    preprocessor = PreProcessor(metype, global_norm=norm_info, local_norm=avgme)
+    preprocessor = PreProcessor(metype, global_norm=norm_info, local_norm=avgme, avgunity=avgunity)
     return preprocessor
 
 
@@ -61,7 +90,11 @@ class PreProcessor(object):
     Definition and application of preprocessing steps
     '''
     
-    def __init__(self, metype, global_norm=None, local_norm=None, mask=None):
+    def __init__(self, metype,
+                 global_norm = None,
+                 local_norm = None,
+                 mask = None,
+                 avgunity = False):
         '''
         Input arguments:
         - metype: type of ME.
@@ -78,6 +111,7 @@ class PreProcessor(object):
         - mask: np array of the same shape as the ME,
           used for masking known problematic regions.
           note: not recommended for input data, better to mask loss directly.
+        - avgunity: rescale average value to unity (after all other preprocessing steps).
         '''
         
         # copy metype attribute
@@ -138,6 +172,9 @@ class PreProcessor(object):
                 slicex = self.anticrop[1]
                 self.mask = np.delete(self.mask, slicey, axis=0)
                 self.mask = np.delete(self.mask, slicex, axis=1)
+                
+        # set other properties
+        self.avgunity = avgunity
             
     
     def preprocess(self, df, **kwargs):
@@ -190,6 +227,14 @@ class PreProcessor(object):
         
         # set negative values to zero
         mes[mes < 0] = 0
+        
+        # set average value to unity
+        if self.avgunity:
+            mes[mes==0] = np.nan
+            norm = np.nanmean(mes, axis=(1,2))
+            mes = np.nan_to_num(mes, nan=0)
+            mes = np.divide(mes, norm[:, None, None])
+            preprocessing_info['avg'] = norm
         
         # printouts if requested
         if verbose:

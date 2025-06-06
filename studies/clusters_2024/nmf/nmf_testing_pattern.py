@@ -32,7 +32,7 @@ def make_dataloaders(input_file_dict):
         for layer, files in layers.items(): dataloaders[era][layer] = MEDataLoader(files)
     return dataloaders
         
-def make_preprocessors(eras, layers):
+def make_preprocessors(eras, layers, **kwargs):
     # make a preprocessor for all eras and layers.
     # input are lists of eras and layers.
     # output is a 2-layer dict of the form era -> layer -> preprocessor.
@@ -41,7 +41,7 @@ def make_preprocessors(eras, layers):
         preprocessors[era] = {}
         preprocessor_era = era
         if '-part' in era: preprocessor_era = era.split('-part')[0]
-        for layer in layers: preprocessors[era][layer] = make_default_preprocessor(preprocessor_era, layer)
+        for layer in layers: preprocessors[era][layer] = make_default_preprocessor(preprocessor_era, layer, **kwargs)
     return preprocessors    
 
 def load_nmfs(nmf_file_dict):
@@ -195,6 +195,9 @@ def run_evaluation(dfs, nmfs,
             losses_binary[layer] *= automask_maps
 
     # optional: do loss masking
+    # update: now applied after combining layers instead of per-layer,
+    # in order to be able to find cases where one layer is masked but another is not.
+    '''
     if do_loss_masking:
         print('    Applying loss mask...')
         for layer in layers:
@@ -202,7 +205,8 @@ def run_evaluation(dfs, nmfs,
             mask = np.expand_dims(mask, 0)
             mask = loss_mask_preprocessors[layer].preprocess_mes(mask, None, None)
             losses_binary[layer] *= mask
-            
+    '''
+        
     # optional: do filtering to keep only given patterns in the per-layer loss map
     if do_per_layer_cleaning:
         print('    Cleaning...')
@@ -221,7 +225,27 @@ def run_evaluation(dfs, nmfs,
     for layer in layers:
         losses_binary_rebinned = rebinning.rebin_keep_clip(losses_binary[layer], target_shape, 1, mode='cv2')
         losses_binary_combined += losses_binary_rebinned
-    losses_binary_combined = (losses_binary_combined >= 2).astype(int)
+    
+    # optional: do loss masking
+    loss_mask = np.zeros(losses_binary_combined.shape)
+    if do_loss_masking:
+        print('    Applying loss mask...')
+        loss_mask = np.zeros((1, target_shape[0], target_shape[1]))
+        for layer in layers:
+            this_loss_mask = loss_masks[layer]
+            # preprocess
+            this_loss_mask = np.expand_dims(this_loss_mask, 0)
+            this_loss_mask = loss_mask_preprocessors[layer].preprocess_mes(this_loss_mask, None, None)
+            # invert
+            this_loss_mask = 1 - this_loss_mask
+            # rescale
+            this_loss_mask = rebinning.rebin_keep_clip(this_loss_mask, target_shape, 1, mode='cv2')
+            # add to total
+            loss_mask += this_loss_mask
+        loss_mask = np.repeat(loss_mask, len(losses_binary_combined), axis=0)
+  
+    # apply threshold on combined binary loss
+    losses_binary_combined = ((losses_binary_combined >= 2) & (losses_binary_combined > loss_mask)).astype(int)
     
     # search for patterns in the combined loss
     print('    Searching for patterns in the loss map...')
@@ -256,7 +280,11 @@ def evaluate(config):
         
     # make dataloaders, preprocessors and models
     dataloaders = make_dataloaders(config['input_files'])
-    preprocessors = make_preprocessors(eras, layers)
+    global_normalization = config.get('preprocessing_global_normalization', None)
+    local_normalization = config.get('preprocessing_local_normalization', None)
+    preprocessors = make_preprocessors(eras, layers,
+                      global_normalization = global_normalization,
+                      local_normalization = local_normalization)
     nmfs = load_nmfs(config['nmf_files'])
     
     # get evaluation settings
