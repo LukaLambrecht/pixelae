@@ -76,13 +76,17 @@ def initJobScript(name,
     os.system('chmod +x '+fname)
     print('initJobScript created {}'.format(fname))
 
-def makeJobDescription(name, exe, argstring=None, 
+def makeJobDescription(name, exe, argstrings=None, 
                        stdout=None, stderr=None, log=None,
                        cpus=1, mem=1024, disk=10240, 
                        proxy=None, jobflavour=None):
     ### create a single job description txt file
     # note: exe can for example be a runnable bash script
-    # note: argstring is a single string containing the arguments to exe (space-separated)
+    # note: argstrings is a single string containing the arguments to exe (space-separated)
+    #       update: now it can also be a list of such strings for multiple parallel
+    #               submissions of the same exe with different arguments.
+    #               this update follows the announcement of the deprecation
+    #               of multiple queue statements in favour of a new syntax.
     # note: for job flavour: see here: https://batchdocs.web.cern.ch/local/submit.html
     
     # parse arguments
@@ -95,7 +99,6 @@ def makeJobDescription(name, exe, argstring=None,
     # write file
     with open(fname,'w') as f:
         f.write('executable = {}\n'.format(exe))
-        if argstring is not None: f.write('arguments = "{}"\n\n'.format(argstring))
         f.write('output = {}\n'.format(stdout))
         f.write('error = {}\n'.format(stderr))
         f.write('log = {}\n\n'.format(log))
@@ -109,7 +112,15 @@ def makeJobDescription(name, exe, argstring=None,
         # (not fully sure whether to put 'yes', 'no' or omit it completely)
         if jobflavour is not None:
             f.write('+JobFlavour = "{}"\n\n'.format(jobflavour))
-        f.write('queue\n\n')
+        # make queue statement
+        if argstrings is None: qcmd = 'queue'
+        else:
+            if isinstance(argstrings, str): argstrings = [argstrings]
+            qcmd = 'queue arguments from (\n'
+            for argstring in argstrings:
+                qcmd += '    "{}"\n'.format(argstring)
+            qcmd += ')'
+        f.write(qcmd + '\n')
     print('makeJobDescription created {}'.format(fname))
 
 def submitCondorJob(jobDescription):
@@ -151,31 +162,36 @@ def submitCommandsAsCondorCluster(name, commands, stdout=None, stderr=None, log=
     name = os.path.splitext(name)[0]
     shname = makeUnique(name+'.sh')
     jdname = name+'.txt'
-    [exe,argstring] = commands[0].split(' ',1) # exe must be the same for all commands
-    nargs = len(argstring.split(' ')) # nargs must be the same for all commands
-    # first make the executable
+    exes = [command.split(' ', 1)[0] for command in commands]
+    exe = exes[0]
+    for test_exe in exes[1:]:
+        if test_exe != exe:
+            msg = 'The executable (i.e. the first element of each command)'
+            msg += ' must be the same for each of the provided commands.'
+            raise Exception(msg)
+    argstrings = [command.split(' ', 1)[1] for command in commands]
+    nargs = len(argstrings[0].split(' '))
+    for test_argstring in argstrings[1:]:
+        if len(test_argstring.split(' ')) != nargs:
+            msg = 'The number of arguments to the executable'
+            msg += ' must be the same for each of the provided commands.'
+            raise Exception(msg)
+
+    # make the job script
     initJobScript(shname, home=home, workdir=workdir, cmssw_version=cmssw_version, proxy=proxy,
       conda_activate=conda_activate, conda_env=conda_env)
     with open(shname,'a') as script:
         script.write(exe)
         script.write(' $@')
         script.write('\n')
-    # then make the job description
-    # first job:
-    makeJobDescription(name,shname,argstring=argstring,stdout=stdout,stderr=stderr,log=log,
-                       cpus=cpus,mem=mem,disk=disk,proxy=proxy,
+
+    # make the job description
+    makeJobDescription(name, shname, argstrings=argstrings,
+                       stdout=stdout, stderr=stderr, log=log,
+                       cpus=cpus, mem=mem, disk=disk, proxy=proxy,
                        jobflavour=jobflavour)
-    # add other jobs:
-    with open(jdname,'a') as script:
-        for command in commands[1:]:
-            [thisexe,thisargstring] = command.split(' ',1)
-            thisnargs = len(thisargstring.split(' '))
-            if( thisexe!=exe or thisnargs!=nargs):
-                print('### ERROR ###: commands are not compatible to put in same cluster')
-                return
-            script.write('arguments = "{}"\n'.format(thisargstring))
-            script.write('queue\n\n')
-    # finally submit the job
+    
+    # finally submit the job cluster
     submitCondorJob(jdname)
 
 def submitCommandsAsCondorJob(name, commands, **kwargs):

@@ -77,6 +77,28 @@ def make_default_preprocessor(era, layer,
         # get the average occupancy map
         avgmefile = os.path.join(normdata_dir, f'avgme_Run2024{era}_{metype}.npy')
         avgme = np.load(avgmefile)
+        
+    elif local_normalization=='avg_previous_era':
+        
+        # find previous era (hard-coded for now)
+        previous_era_dict = {
+          'B-v1': 'C-v1',
+          'C-v1': 'B-v1',
+          'D-v1': 'C-v1',
+          'E-v1': 'D-v1',
+          'E-v2': 'E-v1',
+          'F-v1': 'E-v2',
+          'G-v1': 'F-v1',
+          'H-v1': 'G-v1',
+          'I-v1': 'H-v1',
+          'I-v2': 'I-v1'
+        }
+        previous_era = previous_era_dict[era]
+        
+        # get average occupancy map
+        avgmefile = os.path.join(normdata_dir, f'avgme_Run2024{previous_era}_{metype}.npy')
+        avgme = np.load(avgmefile)
+    
     else:
         raise Exception(f'Local normalization "{local_normalization}" not recognized.')
 

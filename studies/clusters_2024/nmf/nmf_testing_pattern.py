@@ -152,10 +152,6 @@ def run_evaluation(dfs, nmfs,
     ndfnew = len(dfs[layers[0]])    
     print(f'    Found {ndfnew} / {ndf} instances passing filters.')
     
-    # only for testing: print filter results
-    # (decide how to handle more systematically later)
-    #print(filter_results)
-    
     # safety for 0 instances passing filters
     if ndfnew==0:
         res = {
@@ -179,6 +175,14 @@ def run_evaluation(dfs, nmfs,
     print('    Evaluating...')
     losses_binary = {}
     for layer in layers:
+        # experimental: clip very large values
+        # to avoid the NMF model from compromising good agreement in most bins
+        # for the sake of fitting slightly better a few spikes.
+        # (but only when preprocessing is applied, otherwise 'very large' is more difficult to define).
+        if preprocessors is not None:
+            threshold = 5
+            mes_preprocessed[layer][mes_preprocessed[layer] > threshold] = threshold
+        # do evaluation and apply threshold to loss map
         mes_pred = nmfs[layer].predict(mes_preprocessed[layer])
         losses = np.square(mes_preprocessed[layer] - mes_pred)
         losses_binary[layer] = (losses > loss_threshold).astype(int)
@@ -217,8 +221,7 @@ def run_evaluation(dfs, nmfs,
               threshold = cleaning_threshold)
         
     # overlay different layers
-    # strategy: sum the (rebinned) binary loss maps over different layers,
-    # then apply the threshold >= 2 (i.e. overlapping anomaly in at least 2 layers)
+    # strategy: sum the (rebinned) binary loss maps over different layers.
     print('    Combining layers...')
     target_shape = losses_binary[layers[0]].shape[1:3]
     losses_binary_combined = np.zeros(losses_binary[layers[0]].shape)

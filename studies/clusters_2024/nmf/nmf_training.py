@@ -89,7 +89,8 @@ def train(dataloader, nmf,
                                        xbinscolumn='x_bin', ybinscolumn='y_bin',
                                        runcolumn='run_number', lumicolumn='ls_number')
         
-        # experimental: set zero-occupancy to 1 (average expected value after preprocessing)
+        # set zero-occupancy to 1 (average expected value after preprocessing)
+        # (but only when preprocessing is applied, otherwise expected value is more difficult to define).
         mes_preprocessed[mes_preprocessed==0] = 1
         
         # fit NMF
@@ -106,6 +107,8 @@ if __name__=='__main__':
     parser.add_argument('--era', required=True)
     parser.add_argument('--layer', required=True)
     parser.add_argument('--outputfile', required=True)
+    parser.add_argument('--preprocessing_global_normalization', default=None)
+    parser.add_argument('--preprocessing_local_normalization', default=None)
     parser.add_argument('--min_entries', default=0, type=float)
     parser.add_argument('--n_components', default=5, type=int)
     parser.add_argument('--forget_factor', default=1, type=float)
@@ -124,7 +127,9 @@ if __name__=='__main__':
     dataloader = MEDataLoader([files])
     preprocessor_era = args.era
     if '-part' in args.era: preprocessor_era = args.era.split('-part')[0]
-    preprocessor = make_default_preprocessor(preprocessor_era, int(args.layer))
+    preprocessor = make_default_preprocessor(preprocessor_era, int(args.layer),
+                     global_normalization = args.preprocessing_global_normalization,
+                     local_normalization = args.preprocessing_local_normalization)
 
     # determine number of batches
     nbatches = args.nbatches

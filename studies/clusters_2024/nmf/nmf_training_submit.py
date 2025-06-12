@@ -18,24 +18,26 @@ if __name__=='__main__':
         'E-v1',
         'E-v2',
         'F-v1',
-        'F-v1-part1',
-        'F-v1-part2',
-        'F-v1-part3',
-        'F-v1-part4',
+        #'F-v1-part1',
+        #'F-v1-part2',
+        #'F-v1-part3',
+        #'F-v1-part4',
         'G-v1',
-        'G-v1-part1',
-        'G-v1-part2',
-        'G-v1-part3',
-        'G-v1-part4',
+        #'G-v1-part1',
+        #'G-v1-part2',
+        #'G-v1-part3',
+        #'G-v1-part4',
         'H-v1',
         'I-v1',
         'I-v2',
     ])
-    layers = [4]
+    layers = [1, 2, 3, 4]
     outputdir = 'output_test'
     runmode = 'condor'
 
     # preprocessing settings
+    global_normalization = 'avg'
+    local_normalization = None
     min_entries = 0.5e6
 
     # NMF settings
@@ -66,6 +68,10 @@ if __name__=='__main__':
             cmd += f' --era {era}'
             cmd += f' --layer {layer}'
             cmd += f' --outputfile {outputfile}'
+            if global_normalization is not None:
+                cmd += f' --preprocessing_global_normalization {global_normalization}'
+            if local_normalization is not None:
+                cmd += f' --preprocessing_local_normalization {local_normalization}'
             cmd += f' --min_entries {min_entries}'
             cmd += f' --n_components {n_components}'
             cmd += f' --forget_factor {forget_factor}'
