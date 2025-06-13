@@ -100,7 +100,18 @@ def select_json(df, jsonfile, runcolumn='run', lumicolumn='lumi'):
 def select_runsls(df, jsondict, runcolumn='run', lumicolumn='lumi'):
     """
     Equivalent to select_json but using a pre-loaded json dict instead of a json file on disk.
+    Input arguments:
+    - jsondict can be either a dictionary in typical golden json format (see jsontools for more info)
+      or a list of the following form: [(run number, lumisection number), ...]
     """
+    if isinstance(jsondict, list):
+        jsondict_new = {}
+        for el in jsondict:
+            run_number = str(el[0])
+            ls_number = el[1]
+            if run_number in jsondict_new: jsondict_new[run_number].append([ls_number, ls_number])
+            else: jsondict_new[run_number] = [[ls_number, ls_number]]
+        jsondict = jsondict_new
     dfres = df[ jsontools.injson( df[runcolumn].values, df[lumicolumn].values, jsondict=jsondict) ]
     dfres.reset_index(drop=True, inplace=True)
     return dfres

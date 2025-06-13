@@ -175,15 +175,21 @@ def run_evaluation(dfs, nmfs,
     print('    Evaluating...')
     losses_binary = {}
     for layer in layers:
+        # make a copy for some additional processing before inference
+        # that should not be reflected in the original to compare with
+        this_mes_preprocessed = np.copy(mes_preprocessed[layer])
         # experimental: clip very large values
         # to avoid the NMF model from compromising good agreement in most bins
         # for the sake of fitting slightly better a few spikes.
         # (but only when preprocessing is applied, otherwise 'very large' is more difficult to define).
         if preprocessors is not None:
             threshold = 5
-            mes_preprocessed[layer][mes_preprocessed[layer] > threshold] = threshold
-        # do evaluation and apply threshold to loss map
-        mes_pred = nmfs[layer].predict(mes_preprocessed[layer])
+            this_mes_preprocessed[this_mes_preprocessed > threshold] = threshold
+        # experimental: clip zero-values
+        # for exactly the same effect as above but in the opposite direction
+        if preprocessors is not None:
+            this_mes_preprocessed[this_mes_preprocessed == 0] = 1
+        mes_pred = nmfs[layer].predict(this_mes_preprocessed)
         losses = np.square(mes_preprocessed[layer] - mes_pred)
         losses_binary[layer] = (losses > loss_threshold).astype(int)
     

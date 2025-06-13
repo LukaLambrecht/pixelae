@@ -91,13 +91,14 @@ def read_lumisections(path, run_numbers, ls_numbers,
         df = ds.read().to_pandas()
         
     elif mode=='polars':
+        import polars
         # make filter
         lsfilter = ((polars.col(run_column) == run_numbers[0]) & (polars.col(ls_column) == ls_numbers[0]))
         for run_number, ls_number in zip(run_numbers[1:], ls_numbers[1:]):
             lsfilter = (lsfilter) | ((polars.col(run_column) == run_number) & (polars.col(ls_column) == ls_number))
         
         # read dataframe
-        df = polars.scan_parquet(path).filter(lsfilter).collect().to_pandas()
+        df = polars.scan_parquet(path, parallel='prefiltered').filter(lsfilter).collect().to_pandas()
         
     elif mode=='batched':
         # find indices of lumisections
@@ -109,7 +110,7 @@ def read_lumisections(path, run_numbers, ls_numbers,
             ids.append( np.nonzero((run_nbs==run_number) & (ls_nbs==ls_number))[0][0] )
         
         # read dataframe
-        df = read_parquet(path, batch_size=1, batch_ids=ids)
+        df = read_parquet(path, batch_size=1, batch_ids=ids, columns=columns)
         
     else: raise Exception(f'Mode {mode} not recognized.')
         
@@ -131,14 +132,37 @@ def read_runs(path, run_numbers,
     
         # read dataframe
         ds = ParquetDataset(path, filters=runfilter)
-        df = ds.read().to_pandas()
+        df = ds.read(columns=columns).to_pandas()
         
     elif mode=='polars':
+        import polars
         # make filter
-        runfilter = polars.col(run_column).isin(run_numbers)
+        runfilter = polars.col(run_column).is_in(run_numbers)
         
         # read dataframe
-        df = polars.scan_parquet(path).filter(runfilter).collect().to_pandas()
+        df = polars.scan_parquet(path, parallel='prefiltered').filter(runfilter).collect().to_pandas()
+        
+    elif mode=='batched':
+        # find indices of lumisections to read
+        dftemp = read_parquet(path, columns=[run_column])
+        run_nbs = dftemp[run_column].values
+        ids = []
+        for run_number in run_numbers:
+            ids.append( np.nonzero(run_nbs==run_number)[0] )
+        if len(ids)==0:
+            msg = f'None of the runs {run_numbers} was found in the input file {path}.'
+            raise Exception(msg)
+        ids = np.sort(np.concatenate(ids))
+        
+        # define which batches to read based on a fixed batch size
+        batch_size = 1000
+        batch_ids = np.arange(int(ids[0] / batch_size), int(ids[-1] / batch_size) + 1)
+        
+        # read dataframe
+        df = read_parquet(path, batch_size=batch_size, batch_ids=batch_ids, columns=columns)
+        
+        # final filtering
+        df = df[df[run_column].isin(run_numbers)]
         
     else: raise Exception(f'Mode {mode} not recognized.')
         
