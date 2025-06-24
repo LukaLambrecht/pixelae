@@ -16,6 +16,7 @@ topdir = os.path.abspath(os.path.join(thisdir, '../../../'))
 sys.path.append(topdir)
 from tools.dataloadertools import MEDataLoader
 from tools.omstools import find_oms_attr_for_lumisections
+from tools.omstools import find_hlt_rate_for_lumisections
 import tools.patternfiltering as patternfiltering
 import tools.rebinning as rebinning
 from automasking.tools.automaskreader import AutomaskReader
@@ -78,16 +79,16 @@ def run_evaluation_batch(batch_paramset, dataloaders, nmfs, **kwargs):
 
 def filter_dfs(dfs,
                min_entries_filter = None,
-               oms_filters = None):
+               oms_info = None,
+               oms_filters = None,
+               hltrate_info = None,
+               hltrate_filters = None):
     '''
     Filter a set of dataframes.
     Input arguments:
     - dfs: dict of dataframes of the form layer -> dataframe
     - min_entries_filter: dict of the form layer -> miminum number of entries per LS
       (requires each dataframe to have a column "entries" in it).
-    - oms_filters: dict in OMS format, of the following form:
-      {"run_number": [<run numbers>], "lumisection_number": [<lumisection numbers>],
-       "<filter name 1>": [<booleans>], "<filter name 2>": [<booleans>], ...}
     '''
     
     # initializations
@@ -110,14 +111,39 @@ def filter_dfs(dfs,
             
     # OMS attribute filters
     if oms_filters is not None:
-        oms_filter_keys = [key for key in oms_filters.keys() if (key!='run_number' and key!='lumisection_number')]
-        for key in oms_filter_keys:
-            mask = find_oms_attr_for_lumisections(run_numbers, ls_numbers, oms_filters, key)
+        for oms_filter in oms_filters:
+            if len(oms_filter)==1:
+                key = oms_filter[0]
+                filterstr = key
+                mask = find_oms_attr_for_lumisections(run_numbers, ls_numbers, oms_info, key)
+            elif len(oms_filter)==3:
+                key, operator, target = oms_filter
+                filterstr = f'{key} {operator} {target}'
+                values = find_oms_attr_for_lumisections(run_numbers, ls_numbers, oms_info, key)
+                mask = eval(f'values {operator} {target}', {'values': values})
+            else:
+                raise Exception(f'Filter {oms_filter} not recognized.')
             # add to the total mask
             combined_mask = ((combined_mask) & (mask))
             # keep track of lumisections that fail
             fail = [(run, ls) for run, ls in zip(run_numbers[~mask], ls_numbers[~mask])]
-            filter_results[key] = fail
+            filter_results[filterstr] = fail
+            
+    # HLT rate filters
+    if hltrate_filters is not None:
+        for hltrate_filter in hltrate_filters:
+            if len(hltrate_filter)==3:
+                key, operator, target = hltrate_filter
+                filterstr = f'{key} {operator} {target}'
+                values = find_hlt_rate_for_lumisections(run_numbers, ls_numbers, hltrate_info, key)
+                mask = eval(f'values {operator} {target}', {'values': values})
+            else:
+                raise Exception(f'Filter {hltrate_filter} not recognized.')
+            # add to the total mask
+            combined_mask = ((combined_mask) & (mask))
+            # keep track of lumisections that fail
+            fail = [(run, ls) for run, ls in zip(run_numbers[~mask], ls_numbers[~mask])]
+            filter_results[filterstr] = fail
     
     # return results
     return (combined_mask, filter_results)
@@ -125,7 +151,10 @@ def filter_dfs(dfs,
 def run_evaluation(dfs, nmfs,
                      preprocessors = None,
                      min_entries_filter = None,
+                     oms_info = None,
                      oms_filters = None,
+                     hltrate_info = None,
+                     hltrate_filters = None,
                      loss_threshold = 0.1,
                      flagging_patterns = None,
                      flagging_threshold = None,
@@ -145,8 +174,11 @@ def run_evaluation(dfs, nmfs,
     # filtering
     ndf = len(dfs[layers[0]])
     mask, filter_results = filter_dfs(dfs,
-                             min_entries_filter=min_entries_filter,
-                             oms_filters=oms_filters)
+                             min_entries_filter = min_entries_filter,
+                             oms_info = oms_info,
+                             oms_filters = oms_filters,
+                             hltrate_info = hltrate_info,
+                             hltrate_filters = hltrate_filters)
     for layer in layers:
         dfs[layer] = dfs[layer][mask]
     ndfnew = len(dfs[layers[0]])    
@@ -309,13 +341,22 @@ def evaluate(config):
 
     # read filters if needed
     min_entries_filter = config['min_entries_filter'] if 'min_entries_filter' in config.keys() else None
+    oms_info = None
     oms_filters = None
-    if 'oms_filter_keys' in config.keys():
-        oms_filters = {}
+    if 'oms_filters' in config.keys():
+        oms_filters = config['oms_filters']
+        oms_info = {}
         for era in eras:
             with open(config['oms_filter_files'][era], 'r') as f:
-                oms_filters[era] = json.load(f)
-            oms_filters[era] = {key: val for key, val in oms_filters[era].items() if key in config['oms_filter_keys']}
+                oms_info[era] = json.load(f)
+    hltrate_info = None
+    hltrate_filters = None
+    if 'hltrate_filters' in config.keys():
+        hltrate_filters = config['hltrate_filters']
+        hltrate_info = {}
+        for era in eras:
+            with open(config['hltrate_filter_files'][era], 'r') as f:
+                hltrate_info[era] = json.load(f)
 
     # make automask reader if needed
     automask_reader = None
@@ -359,7 +400,10 @@ def evaluate(config):
             batch_results = run_evaluation_batch(batch_paramset, dataloaders[era], nmfs[era],
                                                  preprocessors = preprocessors[era],
                                                  min_entries_filter = min_entries_filter,
-                                                 oms_filters = oms_filters[era],
+                                                 oms_info = oms_info[era],
+                                                 oms_filters = oms_filters,
+                                                 hltrate_info = hltrate_info[era],
+                                                 hltrate_filters = hltrate_filters,
                                                  loss_threshold = loss_threshold,
                                                  flagging_patterns = flagging_patterns,
                                                  flagging_threshold = flagging_threshold,
