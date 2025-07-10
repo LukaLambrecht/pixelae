@@ -16,8 +16,9 @@ from nmf2d import NMF2D
 
 class NMF2DTransformWrapper(BaseEstimator, TransformerMixin):
     
-    def __init__(self, nmf2d):
+    def __init__(self, nmf2d, n_approx_steps=50):
         self.nmf2d = nmf2d
+        self.n_approx_steps = n_approx_steps
         
     def fit(self, X, y=None):
         # dummy since model is supposed to be already trained
@@ -35,14 +36,11 @@ def skl2onnx_shape_calculator(operator):
 
         
 def skl2onnx_converter(scope, operator, container):
-    
-        # set number of approximation steps
-        # (hard-coded for now, maybe find a way to give it as an argument later)
-        n_approx_steps = 50
         
         # get references to raw model
         nmf2d = operator.raw_operator.nmf2d # reference to NMF2D instance
         nmf = nmf2d.nmf # reference to MiniBatchNMF instance
+        n_approx_steps = operator.raw_operator.n_approx_steps
         
         # get the model components (H) and their transpose
         # H is of shape (n_components, n_features)

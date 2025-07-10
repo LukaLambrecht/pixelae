@@ -33,3 +33,6 @@ tools/omsapi/clientid.py
 # ignore automask output
 automasking/data
 automasking/data
+
+# ignore all onnx model file
+**.onnx
