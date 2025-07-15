@@ -32,12 +32,12 @@ if __name__=='__main__':
         'I-v2',
     ])
     layers = [1, 2, 3, 4]
-    outputdir = 'output_test'
+    outputdir = 'output_20250714'
     runmode = 'condor'
 
     # preprocessing settings
     global_normalization = 'avg'
-    local_normalization = None
+    local_normalization = 'avg'
     min_entries = 0.5e6
 
     # NMF settings
