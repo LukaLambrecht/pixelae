@@ -19,6 +19,7 @@ from tools.omstools import find_oms_attr_for_lumisections
 from tools.omstools import find_hlt_rate_for_lumisections
 import tools.patternfiltering as patternfiltering
 import tools.rebinning as rebinning
+import tools.clustering as clustering
 from automasking.tools.automaskreader import AutomaskReader
 from studies.clusters_2024.preprocessing.preprocessor import PreProcessor
 from studies.clusters_2024.preprocessing.preprocessor import make_default_preprocessor
@@ -155,12 +156,9 @@ def run_evaluation(dfs, nmfs,
                      oms_filters = None,
                      hltrate_info = None,
                      hltrate_filters = None,
-                     loss_threshold = 0.1,
                      flagging_patterns = None,
                      flagging_threshold = None,
-                     do_per_layer_cleaning = False,
-                     cleaning_patterns = None,
-                     cleaning_threshold = None,
+                     pattern_thresholds = None,
                      do_automasking = False,
                      automask_reader = None,
                      automask_map_preprocessors = None,
@@ -203,27 +201,26 @@ def run_evaluation(dfs, nmfs,
                                        xbinscolumn='x_bin', ybinscolumn='y_bin',
                                        runcolumn='run_number', lumicolumn='ls_number')
     
-    # do evaluation and apply threhold to loss map
+    # do evaluation
     print('    Evaluating...')
-    losses_binary = {}
+    losses = {}
     for layer in layers:
         # make a copy for some additional processing before inference
         # that should not be reflected in the original to compare with
         this_mes_preprocessed = np.copy(mes_preprocessed[layer])
-        # experimental: clip very large values
+        # clip very large values
         # to avoid the NMF model from compromising good agreement in most bins
         # for the sake of fitting slightly better a few spikes.
         # (but only when preprocessing is applied, otherwise 'very large' is more difficult to define).
         if preprocessors is not None:
             threshold = 5
             this_mes_preprocessed[this_mes_preprocessed > threshold] = threshold
-        # experimental: clip zero-values
+        # clip zero-values
         # for exactly the same effect as above but in the opposite direction
         if preprocessors is not None:
             this_mes_preprocessed[this_mes_preprocessed == 0] = 1
         mes_pred = nmfs[layer].predict(this_mes_preprocessed)
-        losses = np.square(mes_preprocessed[layer] - mes_pred)
-        losses_binary[layer] = (losses > loss_threshold).astype(int)
+        losses[layer] = np.square(mes_preprocessed[layer] - mes_pred)
     
     # optional: do automasking
     if do_automasking:
@@ -234,28 +231,25 @@ def run_evaluation(dfs, nmfs,
             subsystem = f'BPix{layer}'
             automask_maps = amreader.get_automask_maps_for_ls(runs, lumis, subsystem, invert=True)
             automask_maps = automask_map_preprocessors[layer].preprocess_mes(automask_maps, None, None)
-            losses_binary[layer] *= automask_maps
+            losses[layer] *= automask_maps
         
-    # optional: do filtering to keep only given patterns in the per-layer loss map
-    if do_per_layer_cleaning:
-        print('    Cleaning...')
+    # thresholding
+    if pattern_thresholds is not None:
+        print('    Thresholding...')
         for layer in layers:
-            losses_binary[layer] = patternfiltering.filter_any_pattern(
-              losses_binary[layer],
-              cleaning_patterns[layer],
-              threshold = cleaning_threshold)
+            losses[layer] = clustering.cluster_loss_multithreshold(losses[layer], pattern_thresholds)
         
     # overlay different layers
     # strategy: sum the (rebinned) binary loss maps over different layers.
     print('    Combining layers...')
-    target_shape = losses_binary[layers[0]].shape[1:3]
-    losses_binary_combined = np.zeros(losses_binary[layers[0]].shape)
+    target_shape = losses[layers[0]].shape[1:3]
+    losses_combined = np.zeros(losses[layers[0]].shape)
     for layer in layers:
-        losses_binary_rebinned = rebinning.rebin_keep_clip(losses_binary[layer], target_shape, 1, mode='cv2')
-        losses_binary_combined += losses_binary_rebinned
+        losses_rebinned = rebinning.rebin_keep_clip(losses[layer], target_shape, 1, mode='cv2')
+        losses_combined += losses_rebinned
     
     # optional: do loss masking
-    loss_mask = np.zeros(losses_binary_combined.shape)
+    loss_mask = np.zeros(losses_combined.shape)
     if do_loss_masking:
         print('    Applying loss mask...')
         loss_mask = np.zeros((1, target_shape[0], target_shape[1]))
@@ -270,14 +264,14 @@ def run_evaluation(dfs, nmfs,
             this_loss_mask = rebinning.rebin_keep_clip(this_loss_mask, target_shape, 1, mode='cv2')
             # add to total
             loss_mask += this_loss_mask
-        loss_mask = np.repeat(loss_mask, len(losses_binary_combined), axis=0)
+        loss_mask = np.repeat(loss_mask, len(losses_combined), axis=0)
   
     # apply threshold on combined binary loss
-    losses_binary_combined = ((losses_binary_combined >= 2) & (losses_binary_combined > loss_mask)).astype(int)
+    losses_combined = ((losses_combined >= 2) & (losses_combined > loss_mask)).astype(int)
     
     # search for patterns in the combined loss
     print('    Searching for patterns in the loss map...')
-    flags = patternfiltering.contains_any_pattern(losses_binary_combined, flagging_patterns,
+    flags = patternfiltering.contains_any_pattern(losses_combined, flagging_patterns,
               threshold = flagging_threshold)
     
     # store the flagged lumisections
@@ -289,7 +283,7 @@ def run_evaluation(dfs, nmfs,
     # explicitly delete some variables for memory management
     del dfs
     del mes_preprocessed
-    del losses_binary
+    del losses
 
     # return the result
     res = {
@@ -317,12 +311,9 @@ def evaluate(config):
     
     # get evaluation settings
     batch_size = config['batch_size']
-    loss_threshold = config['loss_threshold']
     flagging_patterns = [np.array(el) for el in config['flagging_patterns']]
     flagging_threshold = config['flagging_threshold']
-    do_per_layer_cleaning = config['do_per_layer_cleaning']
-    cleaning_patterns = {key: [np.array(el) for el in val] for key, val in config['cleaning_patterns'].items()}
-    cleaning_threshold = config['cleaning_threshold']
+    pattern_thresholds = config['pattern_thresholds']
     do_automasking = config['do_automasking']
     do_loss_masking = config['do_loss_masking']
 
@@ -391,12 +382,9 @@ def evaluate(config):
                                                  oms_filters = oms_filters,
                                                  hltrate_info = hltrate_info[era],
                                                  hltrate_filters = hltrate_filters,
-                                                 loss_threshold = loss_threshold,
                                                  flagging_patterns = flagging_patterns,
                                                  flagging_threshold = flagging_threshold,
-                                                 do_per_layer_cleaning = do_per_layer_cleaning,
-                                                 cleaning_patterns = cleaning_patterns,
-                                                 cleaning_threshold = cleaning_threshold,
+                                                 pattern_thresholds = pattern_thresholds,
                                                  do_automasking = do_automasking,
                                                  automask_reader = automask_reader,
                                                  automask_map_preprocessors = automask_map_preprocessors,
