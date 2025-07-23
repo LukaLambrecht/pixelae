@@ -12,28 +12,31 @@ if __name__=='__main__':
 
     # general settings
     eras = ([
-        'B-v1',
+        #'B-v1',
         'C-v1',
-        'D-v1',
-        'E-v1',
-        'E-v2',
-        'F-v1',
+        #'D-v1',
+        #'E-v1',
+        #'E-v2',
+        #'F-v1',
         #'F-v1-part1',
         #'F-v1-part2',
         #'F-v1-part3',
         #'F-v1-part4',
-        'G-v1',
+        #'G-v1',
         #'G-v1-part1',
         #'G-v1-part2',
         #'G-v1-part3',
         #'G-v1-part4',
-        'H-v1',
-        'I-v1',
-        'I-v2',
+        #'H-v1',
+        #'I-v1',
+        #'I-v2',
+    ])
+    runs = ([
+        380043
     ])
     layers = [1, 2, 3, 4]
-    outputdir = 'output_20250714'
-    runmode = 'condor'
+    outputdir = 'output_test'
+    runmode = 'local'
 
     # preprocessing settings
     global_normalization = 'avg'
@@ -68,6 +71,9 @@ if __name__=='__main__':
             cmd += f' --era {era}'
             cmd += f' --layer {layer}'
             cmd += f' --outputfile {outputfile}'
+            if runs is not None:
+                runs_str = ' '.join([str(run) for run in runs])
+                cmd += f' --runs {runs_str}'
             if global_normalization is not None:
                 cmd += f' --preprocessing_global_normalization {global_normalization}'
             if local_normalization is not None:

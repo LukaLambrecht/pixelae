@@ -42,11 +42,11 @@ def plot_cluster_occupancy(hist, fig=None, ax=None, fast=False,
         xaxtitle = 'Module'
         xaxticklabels = np.concatenate((np.arange(-4, 0), np.arange(1, 5)))
     elif nxbins==56:
-        # FPix, raw (to check number)
+        # FPix, raw
         xaxtitle = 'Disk'
         xaxticklabels = np.arange(-3, 4)
     elif nxbins==48:
-        # FPix, preprocessed (to check number)
+        # FPix, preprocessed
         xaxtitle = 'Disk'
         xaxticklabels = np.concatenate((np.arange(-3, 0), np.arange(1, 4)))
     else: raise Exception('Number of x-bins not recognized.')
@@ -58,23 +58,38 @@ def plot_cluster_occupancy(hist, fig=None, ax=None, fast=False,
         
     # automatically determine y-axis labels from number of bins
     nybins = hist.shape[0]
-    axhlines = np.arange(2-0.5, nybins-0.5, 2)
-    yaxticks = np.arange(1-0.5, nybins-0.5, 2)
-    if nybins%4==2:
+    if nxbins==72 or nxbins==64:
+        # BPix
+        axhlines = np.arange(2-0.5, nybins-0.5, 2)
+        yaxticks = np.arange(1-0.5, nybins-0.5, 2)
+    elif nxbins==56 or nxbins==48:
+        # FPix
+        axhlines = np.arange(4-0.5, nybins-0.5, 4)
+        yaxticks = np.arange(2-0.5, nybins-0.5, 4)
+    if nxbins==72:
         # BPix, raw
         yaxtitle = 'Ladder'
         nladders = int((nybins-2)/4)
         yaxticklabels = np.arange(-nladders, nladders+1)
-    elif nybins%4==0:
+    elif nxbins==64:
         # BPix, preprocessed
         yaxtitle = 'Ladder'
         nladders = int(nybins/4)
         yaxticklabels = np.concatenate((np.arange(-nladders, 0), np.arange(1, nladders+1)))
-    # FPix: to do later
+    elif nxbins==56:
+        # FPix, raw
+        yaxtitle = 'Panel'
+        nladders = int((nybins-4)/8)
+        yaxticklabels = np.arange(-nladders, nladders+1)
+    elif nxbins==48:
+        # FPix, preprocessed
+        yaxtitle = 'Panel'
+        nladders = int(nybins/8)
+        yaxticklabels = np.concatenate((np.arange(-nladders, 0), np.arange(1, nladders+1)))
     else: raise Exception('Number of y-bins not recognized.')
         
     # subsample y-axis labels (else they are typically overlapping)
-    stepdict = {6: 2, 14: 2, 22: 4, 32: 4}
+    stepdict = {6: 2, 14: 2, 22: 4, 32: 4, 17: 2}
     step = stepdict.get(nladders, 1)
     yaxticks = yaxticks[0::step]
     yaxticklabels = yaxticklabels[0::step]

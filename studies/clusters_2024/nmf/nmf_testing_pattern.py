@@ -235,19 +235,6 @@ def run_evaluation(dfs, nmfs,
             automask_maps = amreader.get_automask_maps_for_ls(runs, lumis, subsystem, invert=True)
             automask_maps = automask_map_preprocessors[layer].preprocess_mes(automask_maps, None, None)
             losses_binary[layer] *= automask_maps
-
-    # optional: do loss masking
-    # update: now applied after combining layers instead of per-layer,
-    # in order to be able to find cases where one layer is masked but another is not.
-    '''
-    if do_loss_masking:
-        print('    Applying loss mask...')
-        for layer in layers:
-            mask = loss_masks[layer]
-            mask = np.expand_dims(mask, 0)
-            mask = loss_mask_preprocessors[layer].preprocess_mes(mask, None, None)
-            losses_binary[layer] *= mask
-    '''
         
     # optional: do filtering to keep only given patterns in the per-layer loss map
     if do_per_layer_cleaning:

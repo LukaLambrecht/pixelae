@@ -14,6 +14,7 @@ thisdir = os.path.dirname(__file__)
 topdir = os.path.abspath(os.path.join(thisdir, '../../../'))
 sys.path.append(topdir)
 
+import tools.iotools as iotools
 import tools.dftools as dftools
 from tools.dataloadertools import MEDataLoader
 from studies.clusters_2024.preprocessing.preprocessor import make_default_preprocessor
@@ -69,11 +70,20 @@ def train(dataloader, nmf,
 
     # loop over random batches
     for batchidx in range(nbatches):
-        
-        # load batch
         if verbose: print(f'Now processing batch {batchidx+1} / {nbatches}...')
-        df = dataloader.read_random_batch(batch_size=batch_size, mode='subbatched', num_subbatches=100)
-        ndf = len(df)
+        
+        # handle case where dataloader is an MEDataLoader object
+        if isinstance(dataloader, MEDataLoader):
+            df = dataloader.read_random_batch(batch_size=batch_size, mode='subbatched', num_subbatches=100)
+            ndf = len(df)
+            
+        # handle case where an already loaded dataframe was provided instead
+        elif isinstance(dataloader, pd.DataFrame):
+            df = dataloader.sample(n=batch_size, replace=True)
+            ndf = len(df)
+            
+        else:
+            raise Exception(f'Dataloader has unknown type {type(dataloader)}')
         
         # filtering
         if min_entries is not None: df = df[df['entries'] > min_entries]
@@ -107,6 +117,7 @@ if __name__=='__main__':
     parser.add_argument('--era', required=True)
     parser.add_argument('--layer', required=True)
     parser.add_argument('--outputfile', required=True)
+    parser.add_argument('--runs', default=None, nargs='+')
     parser.add_argument('--preprocessing_global_normalization', default=None)
     parser.add_argument('--preprocessing_local_normalization', default=None)
     parser.add_argument('--min_entries', default=0, type=float)
@@ -123,20 +134,29 @@ if __name__=='__main__':
     
     # find input files, make data loader and preprocessor
     files = find_files(args.layer)
-    files = files[args.era]
-    dataloader = MEDataLoader([files])
+    mefile = files[args.era]
+    dataloader = MEDataLoader([mefile])
     preprocessor_era = args.era
     if '-part' in args.era: preprocessor_era = args.era.split('-part')[0]
     preprocessor = make_default_preprocessor(preprocessor_era, int(args.layer),
                      global_normalization = args.preprocessing_global_normalization,
                      local_normalization = args.preprocessing_local_normalization)
+    
+    # if runs are specified, read all data in memory
+    df = None
+    if args.runs is not None:
+        args.runs = [int(run) for run in args.runs]
+        df = iotools.read_runs(mefile, args.runs, mode='batched')
+        print(f'Read dataframe for runs {args.runs}, found {len(df)} instances.')
 
     # determine number of batches
     nbatches = args.nbatches
     if args.max_epochs > 0:
         nrows = sum(dataloader.nrows)
-        batches_per_epoch = int(nrows/args.batch_size)
+        if df is not None: nrows = len(df)
+        batches_per_epoch = max(1, int(nrows/args.batch_size))
         nbatches = min(nbatches, args.max_epochs * batches_per_epoch)
+        print(f'Will run over {nbatches} batches of size {args.batch_size}.')
     
     # make nmf
     nmf = NMF2D(
@@ -151,7 +171,9 @@ if __name__=='__main__':
     )
 
     # do training
-    nmf = train(dataloader, nmf,
+    training_data = dataloader
+    if df is not None: training_data = df
+    nmf = train(training_data, nmf,
             nbatches=nbatches, batch_size=args.batch_size,
             min_entries=args.min_entries, preprocessor=preprocessor,
             verbose=True)
