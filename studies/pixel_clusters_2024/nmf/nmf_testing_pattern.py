@@ -21,8 +21,8 @@ import tools.patternfiltering as patternfiltering
 import tools.rebinning as rebinning
 import tools.clustering as clustering
 from automasking.tools.automaskreader import AutomaskReader
-from studies.clusters_2024.preprocessing.preprocessor import PreProcessor
-from studies.clusters_2024.preprocessing.preprocessor import make_default_preprocessor
+from studies.pixel_clusters_2024.preprocessing.preprocessor import PreProcessor
+from studies.pixel_clusters_2024.preprocessing.preprocessor import make_default_preprocessor
 
 
 def make_dataloaders(input_file_dict):
