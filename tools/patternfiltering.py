@@ -31,7 +31,12 @@ def contains_pattern(hists, pattern, mask=None, threshold=1e-3):
     
     # set masked-out positions to not match the pattern
     if mask is not None:
-        hists[:,~mask] = np.min(pattern)-1
+        if len(mask.shape)==2:
+            hists[:,~mask] = np.min(pattern)-1
+        elif len(mask.shape)==3:
+            hists[~mask] = np.min(pattern)-1
+        else:
+            raise Exception('Shape {mask.shape} of mask not recognized.')
     
     # perform pattern matching
     res = np.zeros(len(hists)).astype(bool)

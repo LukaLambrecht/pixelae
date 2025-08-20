@@ -116,7 +116,7 @@ def filter_dfs(dfs,
             if len(oms_filter)==1:
                 key = oms_filter[0]
                 filterstr = key
-                mask = find_oms_attr_for_lumisections(run_numbers, ls_numbers, oms_info, key)
+                mask = find_oms_attr_for_lumisections(run_numbers, ls_numbers, oms_info, key).astype(bool)
             elif len(oms_filter)==3:
                 key, operator, target = oms_filter
                 filterstr = f'{key} {operator} {target}'
