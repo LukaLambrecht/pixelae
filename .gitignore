@@ -34,5 +34,11 @@ tools/omsapi/clientid.py
 automasking/data
 automasking/data
 
-# ignore all onnx model file
+# ignore all onnx model files
 **.onnx
+
+# ignore all joblib model files
+**.joblib
+
+# ignore dials inference service management tool
+**dismcli/
