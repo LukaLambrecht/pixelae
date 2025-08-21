@@ -5,6 +5,7 @@
 
 # ignore notebook version files
 **.sys.v#*
+**.ipynb_checkpoints/
 
 # ignore all root files
 **.root
@@ -42,3 +43,4 @@ automasking/data
 
 # ignore dials inference service management tool
 **dismcli/
+**.dism-artifacts/

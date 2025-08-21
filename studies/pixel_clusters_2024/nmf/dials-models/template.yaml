@@ -12,28 +12,28 @@ Resources:
       BuiltinThreshold: true
       InputSignature:
         - Name: BPix1
-          MonitoringElement: PixelPhase1/Phase1/MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_1
+          MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_1
           DataType: TYPE_INT32 # to do: find correct data type
           Dims:
             - -1
             - 26
             - 72
         - Name: BPix2
-          MonitoringElement: PixelPhase1/Phase1/MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_2
+          MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_2
           DataType: TYPE_INT32 # to do: find correct data type
           Dims:
             - -1
             - 58
             - 72
         - Name: BPix3
-          MonitoringElement: PixelPhase1/Phase1/MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_3
+          MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_3
           DataType: TYPE_INT32 # to do: find correct data type
           Dims:
             - -1
             - 90
             - 72
         - Name: BPix4
-          MonitoringElement: PixelPhase1/Phase1/MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_4
+          MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_4
           DataType: TYPE_INT32 # to do: find correct data type
           Dims:
             - -1
@@ -44,9 +44,9 @@ Resources:
           DataType: TYPE_BOOL
           Dims:
             - -1
-      CodeUri: mlserver_model/
+      CodeUri: /data/pixelae/studies/pixel_clusters_2024/nmf/dials-models/mlserver-model/
       Handler: app.Handler
-      ModelUri: mlserver_model/model.joblib
+      ModelUri: /data/pixelae/studies/pixel_clusters_2024/nmf/dials-models/mlserver-model/pnmf_test.joblib
       Resources:
         Requests:
           cpu: "0.1m"
