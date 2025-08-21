@@ -124,3 +124,7 @@ and then
 
 and finally copy the output the mounted directory (for accessing it outside the container)
 with `cp -r .dism-artifacts/ /data/pixelae/studies/pixel_clusters_2024/nmf/dials-models/`
+
+Note: the strongly recommended step `./dismcli/dismcli start-api` cannot yet be run in this way,
+as it requires a docker container within a docker container (which might or might not be possible but doesn't seem like a good idea).
+A workaround remains to be found.
