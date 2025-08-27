@@ -44,9 +44,9 @@ Resources:
           DataType: TYPE_BOOL
           Dims:
             - -1
-      CodeUri: /data/pixelae/studies/pixel_clusters_2024/nmf/dials-models/mlserver-model/
+      CodeUri: mlserver-model/
       Handler: app.Handler
-      ModelUri: /data/pixelae/studies/pixel_clusters_2024/nmf/dials-models/mlserver-model/pnmf_test.joblib
+      ModelUri: mlserver-model/pnmf_test.joblib
       Resources:
         Requests:
           cpu: "0.1m"
