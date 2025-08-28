@@ -1,17 +1,24 @@
+# Model definition
+
+# note: inside the container, only the files in the mlserver-model directory are visible.
+#       importing local modules from outside this directory is not trivial
+#       (although allegedly possible by making everything a package, but I did not test that yet),
+#       and the simplest (though far from optimal) solution might be to duplicate all local dependencies
+#       in this local model definition...
+
+
+# import external modules
 import os
 import sys
 import joblib
 import numpy as np
 
-thisdir = os.path.dirname(os.path.abspath(__file__))
-topdir = os.path.abspath(os.path.join(thisdir, '../../../..'))
-sys.path.append(topdir)
-
-import tools.patternfiltering as patternfiltering
-import tools.rebinning as rebinning
-import tools.clustering as clustering
-from studies.pixel_clusters_2024.nmf.modeldefs.nmf2d import NMF2D
-from studies.pixel_clusters_2024.preprocessing.preprocessor import PreProcessor
+# import local modules
+import patternfiltering as patternfiltering
+import rebinning as rebinning
+import clustering as clustering
+from nmf2d import NMF2D
+from preprocessor import PreProcessor
 
 
 class PixelNMF(object):

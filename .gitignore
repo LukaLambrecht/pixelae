@@ -44,3 +44,5 @@ automasking/data
 # ignore dials inference service management tool
 **dismcli/
 **.dism-artifacts/
+**.cache/
+**.cache-dev/

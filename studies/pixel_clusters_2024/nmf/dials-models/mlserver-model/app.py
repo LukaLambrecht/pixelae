@@ -1,4 +1,14 @@
-# from this example: https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/blob/master/sklearn_nmf/mlserver_model/app.py?ref_type=heads
+# Handler class defining the interface between central DIALS syntax and custom model syntax
+
+# modified from this example:
+# https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/blob/master/sklearn_nmf/mlserver_model/app.py?ref_type=heads
+
+# note: inside the container, only the files in the mlserver-model directory are visible.
+#       importing local modules from outside this directory is not trivial
+#       (although allegedly possible by making everything a package, but I did not test that yet),
+#       and the simplest (though far from optimal) solution might be to duplicate all local dependencies
+#       in the local model definition; see pixelnmf.py.
+
 
 # import external modules
 import os
@@ -12,11 +22,6 @@ from mlserver.utils import get_model_uri
 
 # import local modules
 from datatype import dtype_to_datatype
-
-# import pixelNMF
-thisdir = os.path.abspath(os.path.dirname(__file__))
-topdir = os.path.abspath(os.path.join(thisdir, '..'))
-sys.path.append(topdir)
 from pixelnmf import PixelNMF
 
 
