@@ -1,5 +1,6 @@
 # define NMF model for 2D input arrays
 
+import copy
 import numpy as np
 from sklearn.decomposition import MiniBatchNMF
 
@@ -26,3 +27,11 @@ class NMF2D(object):
         Y = self.nmf.inverse_transform(self.nmf.transform(X))
         Y = np.reshape(Y, (-1, *self.xshape))
         return Y
+    
+    @staticmethod
+    def from_other(other):
+        new = NMF2D()
+        new.nmf = copy.deepcopy(other.nmf)
+        new.xshape = copy.deepcopy(other.xshape)
+        new.components = copy.deepcopy(other.components)
+        return new

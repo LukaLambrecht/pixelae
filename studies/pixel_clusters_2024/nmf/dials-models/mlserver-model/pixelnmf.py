@@ -10,7 +10,6 @@
 # import external modules
 import os
 import sys
-import joblib
 import numpy as np
 
 # import local modules
@@ -35,7 +34,7 @@ class PixelNMF(object):
         '''
         Initializer.
         Input arguments:
-        - nmfs: dictionary of the following form: {monitoring element name: path to stored NMF model, ...}
+        - nmfs: dictionary of the following form: {monitoring element name: NMF model, ...}
         - local_norms: dictionary of the following form: {monitoring element name: local norm (2D np array), ...}
         - loss_masks: dictionary of the following form: {monitoring element name: loss mask (2D np array), ...}
         '''
@@ -43,11 +42,10 @@ class PixelNMF(object):
         # get monitoring element names for later use
         self.menames = list(nmfs.keys())[:]
         
-        # load NMF models
+        # check NMF models
         # note: one model per monitoring element
         self.nmfs = {}
-        for mename, nmffile in nmfs.items():
-            nmf = joblib.load(nmffile)
+        for mename, nmf in nmfs.items():
             if not isinstance(nmf, NMF2D):
                 msg = f'WARNING in PixelNMF.__init__: received object of type {type(nmf)},'
                 msg += ' while an NMF2D model was expected; things might break further downstream.'
