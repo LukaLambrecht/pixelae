@@ -1,29 +1,36 @@
-# copied from here:
+# copied and modified from here:
 # https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/blob/master/scripts/test_predictions.py
 
+import pickle
 import argparse
 from typing import Optional
-
 import numpy as np
 import requests
 
 
-def inference_over_http(data: np.array, model_name: str, port: Optional[str] = None):
+def inference_over_http(data: dict, model_name: str, port: Optional[str] = None):
     url = f"http://127.0.0.1:{port}/v2/models/{model_name}/infer"
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
+
+    # build inputs
+    inputs = []
+    for name, arr in data.items():
+        this_input = {}
+        this_input['name'] = name
+        this_input['shape'] = arr.shape
+        this_input['datatype'] = "INT32"
+        this_input['data'] = arr.tolist()
+        inputs.append(this_input)
+
+    # format body
     body = {
-        "inputs": [
-            {
-                "name": "input_0",
-                "shape": data.shape,
-                "datatype": "FP32",
-                "data": data.tolist()
-            }
-        ]
+        "inputs": inputs
     }
+
+    # make request
     response = requests.post(url, headers=headers, json=body)
     response.raise_for_status()
     return response.json()
@@ -31,30 +38,24 @@ def inference_over_http(data: np.array, model_name: str, port: Optional[str] = N
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process run number, optional URL, and optional headers.")
-    parser.add_argument("-r", "--run_number", type=int, help="The run number (required integer argument).")
     parser.add_argument("-p", "--port", type=str, help="Web server port.")
     parser.add_argument("-n", "--model-name", type=str, help="Model name.")
     args = parser.parse_args()
     
-    if args.run_number < 0:
-        quit("ERROR: The provided run number must be a non-negative integer.")
     if not args.port:
         quit("ERROR: The port number must be provided.")
     if not args.model_name:
         quit("ERROR: The model name must be provided.")
 
-    data_arr = np.load("../src/data_unfiltered.npy")
-    run_arr = np.load("../src/runs_unfiltered.npy")
-    unique_runs = np.unique(run_arr)
+    # load data
+    with open('test_data.pkl', 'rb') as f:
+        data = pickle.load(f)
 
-    if args.run_number not in unique_runs:
-        quit(f"ERROR: The specified run number is not present in the sample data. Please, choose one of the following: {unique_runs.tolist()}")
-    
-    # Collect the data to send to the model
-    target_data = data_arr[run_arr == args.run_number]
+    # take only a small part
+    #data = {name: arr[:1000, :, :] for name, arr in data.items()}
 
-    # Do the inference
-    predictions = inference_over_http(target_data, args.model_name, args.port)
+    # do the inference
+    predictions = inference_over_http(data, args.model_name, args.port)
 
     # Parse the output predictions
     outputs = predictions["outputs"]
@@ -62,4 +63,6 @@ if __name__ == "__main__":
         data = np.array(output["data"]).reshape(output["shape"])
         print(f"Output name: {output['name']}, shape: {output['shape']}, datatype: {output['datatype']}")
         print(f"Data: {data}")
+        print(f'Number of LS: {len(data)}')
+        print(f'Number of flagged LS: {np.sum(data.astype(int))}')
         print("==============================")

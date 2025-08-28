@@ -22,6 +22,7 @@ from mlserver.utils import get_model_uri
 
 # import local modules
 from datatype import dtype_to_datatype
+from datatype import datatype_to_dtype
 from pixelnmf import PixelNMF
 
 
@@ -54,12 +55,14 @@ class Handler(MLModel):
 
     async def postprocess(self, results: np.ndarray) -> List[ResponseOutput]:
         """Process results from model inference and make each output compliant with Open Inference Protocol"""
-        outputs = ResponseOutput(
-                    name='Flag',
-                    shape=result.shape,
-                    datatype=dtype_to_datatype(result.dtype),
-                    data=result.flatten().tolist(),
-                  )
+        outputs = [
+                    ResponseOutput(
+                      name='Flag',
+                      shape=results.shape,
+                      datatype=dtype_to_datatype(results.dtype),
+                      data=results.flatten().tolist(),
+                    )
+                  ]
 
         return outputs
 
@@ -70,6 +73,8 @@ class Handler(MLModel):
         data = await self.preprocess(request.inputs)
         data = await self.inference(data)
         data = await self.postprocess(data)
+        print(data)
+        print(type(data))
         return InferenceResponse(
             id=request.id, model_name=self.model_name, model_version=self.model_version, outputs=data
         )

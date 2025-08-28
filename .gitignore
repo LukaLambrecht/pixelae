@@ -41,6 +41,9 @@ automasking/data
 # ignore all joblib model files
 **.joblib
 
+# ignore all pickle data files
+**.pkl
+
 # ignore dials inference service management tool
 **dismcli/
 **.dism-artifacts/

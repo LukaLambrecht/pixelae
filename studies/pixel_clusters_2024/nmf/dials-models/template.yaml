@@ -7,7 +7,7 @@ Resources:
     Properties:
       Description: Spot anomalies in the pixel cluster occupancy (barrel layers)
       Name: pixel-barrel-nmf
-      Image: registry.cern.ch/docker.io/seldonio/mlserver:1.5.0
+      Image: seldonio/mlserver:1.5.0
       MetricKey: output_0
       BuiltinThreshold: true
       InputSignature:
@@ -46,7 +46,7 @@ Resources:
             - -1
       CodeUri: mlserver-model/
       Handler: app.Handler
-      ModelUri: mlserver-model/pnmf_test.joblib
+      ModelUri: mlserver-model/pixelnmf.joblib
       Resources:
         Requests:
           cpu: "0.1m"
