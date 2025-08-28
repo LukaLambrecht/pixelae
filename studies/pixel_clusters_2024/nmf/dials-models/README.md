@@ -6,56 +6,60 @@ For general information on how to integrate a given model in DIALS, see here:
 - [dism-cli](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-cli/-/tree/develop?ref_type=heads) (which is the tool used in the examples above).
 
 This folder just contains one particular example, for the pixel NMF models developed in this project.
-But in case they can serve as some useful guidance, follow the steps below
-(preliminary, just some notes as I struggle along, to be updated with more final info!).
+Integration in DIALS for this projec was achieved in a long back-and-forth interaction with Gabriel (the DIALS developer),
+and it is expected that different models, package versions, oprating systems, etc, could give unexpected issues not covered below.
+But still, in case they can serve as some useful guidance, I collected some instructions and notes below.
 
 ### Define model
-This step comes before any DIALS integration code;
-it's just a matter of defining a model class,
-building and training the model (or loading a trained one),
-and dumping everything into a single neatly packaged `.joblib` file.
+This step comes before any DIALS integration code.
+It's just a matter of defining a model class, building and training the model (or loading a trained one), and dumping everything into a single neatly packaged `.joblib` file.
 
 See [dism-examples](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master?ref_type=heads) for some minimal examples.
 This particular case is mainly based on the [sklearn NMF example](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master/sklearn_nmf?ref_type=heads),
 where the model is defined, trained, and dumped to a `.joblib` file in the notebook `main.ipynb`.
 
-For this particular case, the model is defined in a `PixelNMF` class in the file `pixelnmf.py`.
+For this particular case, the model is defined in a `PixelNMF` class in the file `pixelnmf.py` (in the `mlserver-model` folder).
 It is then instantiated and dumped into a `.joblib` file by the `instantiate_pixelnmf.ipynb` notebook.
+The loading of the model and evaluation on some example data can be tested with `test_pixelnmf_load.ipynb` and `test_pixelnmf_run.ipynb` respectively.
 
-Note: the `PixelNMF` class in the file `pixelnmf.py` is not standalone;
-it contains many imports of utility classes and functions defined elsewhere in this project.
-Consequently, the `.joblib` file by itself is pretty useless;
-to be able to load and actually use the model somewhere in another script,
-the `PixelNMF` class and all its dependencies need to be importable.
-Not sure if this will be a problem for packaging the model and shipping it to DIALS,
-this remains to be seen.
-It is more complicated than the example linked above, where the entire model is defined in a single class/file,
-with no other local dependencies (only external packages such as `sklearn`).
+**Note about dependencies**: the main difficulty with the `.joblib` file produced in this way is that it is not standalone.
+It needs the class of which the instance was dumped, but also all its potential dependencies, to be present in the namespace when loading the `.joblib` file.
+This is not an issue in most of the `dism-examples` linked above, as they are simple models defined in a single file with no local dependencies.
+But on the other hand, the `PixelNMF` class in the file `pixelnmf.py` is not standalone; it relies on many imports of utility classes and functions defined elsewhere in this project.
+The problem is that the final packaged model shipped to DIALS only has access to whatever is in the `mlserver-model` folder, nothing outside of it.
+There are multiple potential solutions:
+- Make all dependencies into packages that can be imported without needing to specify the path. Recommended by Gabriel but not yet tried, likely too much overhead and overcomplication.
+- Copy all dependencies to the `mlserver-model` folder (and change all import paths to flat local imports). Obviously not ideal in case of future modifications, but chosen for now. 
 
 ### Prepare required handling and configuration files
 A couple of files need to be prepared to parse the model into a format suitable for DIALS.
 In particular:
-- `template.yaml`.
-- `mlserver-model` and all files in it.
+- `template.yaml`, specifying some configuration settings such as input monitoring element names, shapes, and data types.
+- `app.py` (inside the `mlserver-model` folder), specifying the interface between DIALS syntax and custom model syntax.
 
 The versions in this particular case were copied from the [sklearn NMF example](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master/sklearn_nmf?ref_type=heads),
-and slightly modified as needed (e.g. specify multiple monitoring elements, etc).
-
-More detailed information to write when it is actually validated and working.
-
-Note: in this particular case, the `CodeUri` and `ModelUri` start with `/data`.
-This is needed for making it work with a Docker container, see below for more info. 
+and modified as needed (e.g. specify multiple monitoring elements, etc).
 
 ### Get the dismcli tool
-The tool that parses the model into DIALS (using the config files defined in the previous step),
-is called DIALS Inference Service Manager (DISM).
+The tool that parses the model into DIALS (using the config files defined in the previous step), is called DIALS Inference Service Manager (DISM).
 
-An installation script is provided [here](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/blob/master/scripts/install_dismcli.sh?ref_type=heads),
-but the only strictly required steps are the `wget` and `tar` commands.
-All other steps are needed just to be able to call `dismcli` from anywhere in the terminal,
-but optionally you can skip these and just always call the executable using the correct path
-(between where it was installed and where you currently are in the terminal,
-e.g. `../dismcli/dismcli` instead of `dismcli`).
+It is installable via pip in a python virtual environment. Follow the steps below:
+```
+python3.11 -m venv venv
+source venv/bin/activate
+pip install "cmsdism[docker,podman]"
+```
+
+**Note about python version**: Only tested with python 3.11 (following Gabriel's instructions), not clear how sensitive everything is to the precise python version.
+If you don't have python 3.11, you can install it (on your local pc) with `sudo apt intall python3.11`.
+You might also need to do `sudo apt install python3.11-venv` in order to be able to create virtual environments as shown above.
+
+**Note about where to run this**: In principle, dismcli could be installed and run on lxplus.
+But in that case, you need to modifiy `pip install "cmsdism[docker,podman]"` to `pip install "cmsdism[podman]"`, the inclusion of docker seems to mess up things.
+Also, running it on `/eos` seems not to work, somehow the correct paths cannot be mounted inside the container (see next steps); you need to run from `/afs`.
+However, for the particular case of the mlserver (e.g. for sklearn models), there are other issues on lxplus for which no solution currently is known.
+So you probably need to run on your local pc.
+(This issue is not there for the triton server, e.g. for tensorflow/onnx models).
 
 ### Run the dismcli tool
 Follow the steps in the [sklearn NMF example](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master/sklearn_nmf?ref_type=heads).
