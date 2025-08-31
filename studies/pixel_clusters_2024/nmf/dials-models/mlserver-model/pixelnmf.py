@@ -73,6 +73,16 @@ class PixelNMF(object):
         if self.flagging_patterns is None:
             self.flagging_patterns = [np.ones((1, 8)), np.ones((2, 4))]
             
+    def check_keys(self, X, verbose=False):
+        '''
+        Internal helper function to check keys of provided input data.
+        '''
+        if sorted(list(X.keys())) != sorted(self.menames):
+            msg = 'ERROR: keys of provided data and self.menames do not agree;'
+            msg += f' found {X.keys()} and {self.menames.keys()} respectively.'
+            if verbose: print(msg)
+            raise Exception(msg)
+            
     def make_combined_loss_mask(self, loss_masks):
         '''
         Internal helper function to make combined loss mask
@@ -112,6 +122,7 @@ class PixelNMF(object):
         # loop over monitoring elements
         mes_preprocessed = {}
         if verbose: print('[INFO]: preprocessing...')
+        self.check_keys(X, verbose=verbose)
         for mename in self.menames:
             if verbose: print(f'  - {mename}')
             # do basic preprocessing using preprocessors defined earlier
@@ -128,6 +139,7 @@ class PixelNMF(object):
         # loop over monitoring elements
         mes_reco = {}
         if verbose: print('[INFO]: running inference...')
+        self.check_keys(X, verbose=verbose)
         for mename in self.menames:
             if verbose: print(f'  - {mename}')
             X_input = np.copy(X[mename])
@@ -155,7 +167,7 @@ class PixelNMF(object):
     def loss(self, X_input, X_reco, do_thresholding=True, verbose=False):
         '''
         Do loss calculation.
-        - Input arguments:
+        Input arguments:
         - X_input and X_reco: dictionary of the following form {monitoring element name: data (2D np array), ...}
           with input data (preprocessed) and NMF reconstruction respectively.
         '''
@@ -163,6 +175,8 @@ class PixelNMF(object):
         # loop over monitoring elements
         losses = {}
         if verbose: print('[INFO]: calculating losses...')
+        self.check_keys(X_input, verbose=verbose)
+        self.check_keys(X_reco, verbose=verbose)
         for mename in self.menames:
             if verbose: print(f'  - {mename}')
             # calculate losses
@@ -175,12 +189,13 @@ class PixelNMF(object):
     def combine(self, X_loss, do_masking=True, do_thresholding=True, verbose=False):
         '''
         Combine losses from different layers.
-        - Input arguments:
+        Input arguments:
         - X_loss: dictionary of the following form {monitoring element name: loss (2D np array), ...}
         '''
         
         # overlay different monitoring elements
         if verbose: print('[INFO]: overlaying layers...')
+        self.check_keys(X_loss, verbose=verbose)
         target_shape = X_loss[self.menames[0]].shape[1:3]
         losses_combined = np.zeros(X_loss[self.menames[0]].shape)
         for mename in self.menames:
@@ -209,25 +224,85 @@ class PixelNMF(object):
     def flag(self, X_loss, verbose=False):
         '''
         Do final flagging of combined loss map.
-        - Input arguments:
+        Input arguments:
         - X_loss: combined loss (2D np array)
         '''
         
         # search for patterns in the combined loss
         flags = patternfiltering.contains_any_pattern(X_loss, self.flagging_patterns, threshold = 1e-3)
         return flags
+    
+    def get_filter_mask(self, X_input, verbose=False):
+        '''
+        Apply filters.
+        Note: for now only min. number of entries filter implemented, as it is inherent in the data;
+              other filters that require external info (like trigger rate, pileup, and DCS bits) to do later.
+        Note: filters hard-coded in this function for now, maybe generalize later.
+        Input arguments:
+        - X_input: dictionary of the following form {monitoring element name: data (2D np array), ...} with input data.
+        '''
+        
+        # initializations
+        if verbose: print('[INFO]: applying filter...')
+        firstkey = list(X_input.keys())[0]
+        mask = np.ones(len(X_input[firstkey])).astype(bool)
+        
+        # define minimum entries filter
+        min_entries_filter = {
+            'BPix1': 0.5e6,
+            'BPix2': 0.5e6/2,
+            'BPix3': 0.5e6/3,
+            'BPix4': 0.5e6/4
+        }
+        
+        # check keys
+        self.check_keys(X_input, verbose=verbose)
+        if sorted(list(min_entries_filter.keys()))!=sorted(self.menames):
+            msg = 'ERROR: keys of min_entries_filter and self.menames do not agree;'
+            msg += f' found {min_entries_filter.keys()} and {self.menames.keys()} respectively.'
+            if verbose: print(msg)
+            raise Exception(msg)
+        
+        # apply minimum number of entries filter
+        for mename in self.menames:
+            threshold = min_entries_filter[mename]
+            values = np.sum(X_input[mename], axis=(1,2))
+            this_mask = (values > threshold).astype(bool)
+            mask = (mask & this_mask)
+            if verbose:
+                ntot = len(this_mask)
+                npass = np.sum(this_mask.astype(int))
+                print(f'[INFO]: min. entries mask for {mename}: {npass} / {ntot} passing lumisections.')
+        
+        # total mask printouts
+        if verbose:
+            ntot = len(mask)
+            npass = np.sum(mask.astype(int))
+            print(f'[INFO]: total mask: {npass} / {ntot} passing lumisections.')
+            
+        # return mask
+        return mask
         
     def predict(self, X, verbose=False):
         '''
         Run full chain on incoming data X
         '''
+        
         if verbose:
             print('[INFO]: Running PixelNMF.predict on the following data:')
             for key, val in X.items():
                 print(f'  - {key}: {val.shape}')
+        
+        # do preprocessing, inference, and loss calculation
         mes_preprocessed = self.preprocess(X, verbose=verbose)
         mes_reco = self.infer(mes_preprocessed, verbose=verbose)
         losses = self.loss(mes_preprocessed, mes_reco, do_thresholding=True, verbose=verbose)
         losses_combined = self.combine(losses, do_masking=True, do_thresholding=True, verbose=verbose)
         flags = self.flag(losses_combined, verbose=verbose)
+        
+        # apply mask
+        mask = self.get_filter_mask(X, verbose=verbose)
+        flags[~mask] = False
+        
+        # return final result
         return flags
