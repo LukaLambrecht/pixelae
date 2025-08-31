@@ -69,8 +69,8 @@ Build: `dismcli build -f template.yaml -u https://dev-cmsdials-api.web.cern.ch`.
 Test: `dismcli start-api -r PixelNMF` (change the name to the name of your model).
 If this runs correctly, it will print out a whole bunch of stuff, and at some point just seem to hang.
 This is the expected behaviour, it means the server is running (locally).
-Open another terminal (and go to this directory and start the virtual environment), and run `python test_predictions.py`.
-You will need to update this script for your particular use case though.
+Open another terminal (and go to this directory and start the virtual environment), and run `python test_predictions.py -p 8080 -n pixel-barrel-nmf`.
+You will need to update this script (and the command line args) for your particular use case though.
 In case it runs correctly, you should get the expected output; else you can check the terminal window where the server is running for the particular error message.
 You can stop the server with ctrl+Z, but you also need to do `docker container ls` and `docker rm -f <id>` to free up the port.
 
