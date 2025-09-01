@@ -7,8 +7,9 @@ Resources:
     Properties:
       Description: Spot anomalies in the pixel cluster occupancy (barrel layers)
       Name: pixel-barrel-nmf
-      Image: seldonio/mlserver:1.5.0
+      Image: registry.cern.ch/docker.io/seldonio/mlserver:1.5.0
       MetricKey: output_0
+      FlaggingKey: output_0
       BuiltinThreshold: true
       InputSignature:
         - Name: BPix1
