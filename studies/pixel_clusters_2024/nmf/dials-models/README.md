@@ -1,5 +1,6 @@
 # Model definition for integration with DIALS
 
+### References
 For general information on how to integrate a given model in DIALS, see here:
 - [dism-examples](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master?ref_type=heads).
 - In particular for this case, the [sklearn NMF example](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master/sklearn_nmf?ref_type=heads) was the main inspiration.
@@ -7,6 +8,7 @@ For general information on how to integrate a given model in DIALS, see here:
 
 This folder just contains one particular example, for the pixel NMF models developed in this project.
 Integration in DIALS for this projec was achieved in a long back-and-forth interaction with Gabriel (the DIALS developer),
+and also via this [GitLab issue](https://gitlab.cern.ch/cms-ppd/technical-support/web-services/dials-service/-/issues/136),
 and it is expected that different models, package versions, oprating systems, etc, could give unexpected issues not covered below.
 But still, in case they can serve as some useful guidance, I collected some instructions and notes below.
 
@@ -72,7 +74,7 @@ This is the expected behaviour, it means the server is running (locally).
 Open another terminal (and go to this directory and start the virtual environment), and run `python test_predictions.py -p 8080 -n pixel-barrel-nmf`.
 You will need to update this script (and the command line args) for your particular use case though.
 In case it runs correctly, you should get the expected output; else you can check the terminal window where the server is running for the particular error message.
-You can stop the server with ctrl+Z, but you also need to do `docker container ls` and `docker rm -f <id>` to free up the port.
+You can stop the server with ctrl+C. Or if you do ctrl+Z instead, but then you also need to do `docker container ls` and `docker rm -f <id>` to free up the port.
 
 Finally, do `dismcli package -u https://dev-cmsdials-api.web.cern.ch`.
 
