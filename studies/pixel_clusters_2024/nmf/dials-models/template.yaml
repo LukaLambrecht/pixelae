@@ -7,41 +7,48 @@ Resources:
     Properties:
       Description: Spot anomalies in the pixel cluster occupancy (barrel layers)
       Name: pixel-barrel-nmf
-      Image: seldonio/mlserver:1.5.0
-      MetricKey: output_0
+      Image: registry.cern.ch/docker.io/seldonio/mlserver:1.5.0
+      # note: the FlaggingKey and MetricKey should correspond to one of the names in the ResponseOutput,
+      #       defined in mlserver-model/app.py/postprocess!
+      FlaggingKey: Flag
+      MetricKey: Metric
       BuiltinThreshold: true
       InputSignature:
         - Name: BPix1
           MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_1
-          DataType: TYPE_INT32 # to do: find correct data type
+          DataType: TYPE_INT32
           Dims:
             - -1
             - 26
             - 72
         - Name: BPix2
           MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_2
-          DataType: TYPE_INT32 # to do: find correct data type
+          DataType: TYPE_INT32
           Dims:
             - -1
             - 58
             - 72
         - Name: BPix3
           MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_3
-          DataType: TYPE_INT32 # to do: find correct data type
+          DataType: TYPE_INT32
           Dims:
             - -1
             - 90
             - 72
         - Name: BPix4
           MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_4
-          DataType: TYPE_INT32 # to do: find correct data type
+          DataType: TYPE_INT32
           Dims:
             - -1
             - 130
             - 72
       OutputSignature:
-        - Name: output_0
+        - Name: Flag
           DataType: TYPE_BOOL
+          Dims:
+            - -1
+        - Name: Metric
+          DataType: TYPE_FP32
           Dims:
             - -1
       CodeUri: mlserver-model/
@@ -53,4 +60,4 @@ Resources:
           memory: "250m"
         Limits:
           cpu: "1"
-          memory: "2Gi"
+          memory: "10Gi"

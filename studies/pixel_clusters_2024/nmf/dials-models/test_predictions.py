@@ -9,6 +9,8 @@ import requests
 
 
 def inference_over_http(data: dict, model_name: str, port: Optional[str] = None):
+    
+    print('Formatting request...')
     url = f"http://127.0.0.1:{port}/v2/models/{model_name}/infer"
     headers = {
         "Accept": "application/json",
@@ -22,7 +24,12 @@ def inference_over_http(data: dict, model_name: str, port: Optional[str] = None)
         this_input['name'] = name
         this_input['shape'] = arr.shape
         this_input['datatype'] = "INT32"
-        this_input['data'] = arr.tolist()
+        # note: data below should be flattened!
+        #       it will run fine locally if not flattened,
+        #       but that doesn't work in production.
+        #       see more info here:
+        #       https://gitlab.cern.ch/cms-ppd/technical-support/web-services/dials-service/-/issues/136#note_10063426
+        this_input['data'] = arr.flatten().tolist()
         inputs.append(this_input)
 
     # format body
@@ -31,8 +38,10 @@ def inference_over_http(data: dict, model_name: str, port: Optional[str] = None)
     }
 
     # make request
+    print('Posting request...')
     response = requests.post(url, headers=headers, json=body)
     response.raise_for_status()
+    print('Response received.')
     return response.json()
 
 
