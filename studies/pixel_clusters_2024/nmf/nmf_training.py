@@ -17,8 +17,8 @@ sys.path.append(topdir)
 import tools.iotools as iotools
 import tools.dftools as dftools
 from tools.dataloadertools import MEDataLoader
-from studies.clusters_2024.preprocessing.preprocessor import make_default_preprocessor
-from studies.clusters_2024.nmf.modeldefs.nmf2d import NMF2D
+from studies.pixel_clusters_2024.preprocessing.preprocessor import make_default_preprocessor
+from studies.pixel_clusters_2024.nmf.modeldefs.nmf2d import NMF2D
 
 
 def find_files(layer):

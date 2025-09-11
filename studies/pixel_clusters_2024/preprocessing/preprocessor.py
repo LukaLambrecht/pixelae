@@ -53,7 +53,7 @@ def make_default_preprocessor(era, layer,
     elif global_normalization=='norm':
 
         # load norm json
-        normfile = os.path.join(normdata_dir, f'normdata_Run2024{era}_{metype}.json')
+        normfile = os.path.join(normdata_dir, f'normdata_Run{era}_{metype}.json')
         with open(normfile, 'r') as f:
             norm_info = json.load(f)
     
@@ -75,35 +75,41 @@ def make_default_preprocessor(era, layer,
     elif local_normalization=='avg':
         
         # get the average occupancy map
-        avgmefile = os.path.join(normdata_dir, f'avgme_Run2024{era}_{metype}.npy')
+        avgmefile = os.path.join(normdata_dir, f'avgme_Run{era}_{metype}.npy')
         avgme = np.load(avgmefile)
         
     elif local_normalization=='avg_previous_era':
         
         # find previous era (hard-coded for now)
         previous_era_dict = {
-          'B-v1': 'C-v1',
-          'C-v1': 'B-v1',
-          'D-v1': 'C-v1',
-          'E-v1': 'D-v1',
-          'E-v2': 'E-v1',
-          'F-v1': 'E-v2',
-          'G-v1': 'F-v1',
-          'H-v1': 'G-v1',
-          'I-v1': 'H-v1',
-          'I-v2': 'I-v1'
+          '2024B-v1': '2024C-v1',
+          '2024C-v1': '2024B-v1',
+          '2024D-v1': '2024C-v1',
+          '2024E-v1': '2024D-v1',
+          '2024E-v2': '2024E-v1',
+          '2024F-v1': '2024E-v2',
+          '2024G-v1': '2024F-v1',
+          '2024H-v1': '2024G-v1',
+          '2024I-v1': '2024H-v1',
+          '2024I-v2': '2024I-v1',
+          '2025B-v1': '2024I-v2',
+          '2025C-v1': '2025B-v1',
+          '2025C-v2': '2025C-v1',
+          '2025D-v1': '2025C-v2',
+          '2025E-v1': '2025D-v1',
+          '2025F-v1': '2025E-v1',
         }
         previous_era = previous_era_dict[era]
         
         # get average occupancy map
-        avgmefile = os.path.join(normdata_dir, f'avgme_Run2024{previous_era}_{metype}.npy')
+        avgmefile = os.path.join(normdata_dir, f'avgme_Run{previous_era}_{metype}.npy')
         avgme = np.load(avgmefile)
     
     elif local_normalization.startswith('avg_era_'):
         
         # get average occupancy map
         era = local_normalization.replace('avg_era_', '')
-        avgmefile = os.path.join(normdata_dir, f'avgme_Run2024{era}_{metype}.npy')
+        avgmefile = os.path.join(normdata_dir, f'avgme_Run{era}_{metype}.npy')
         avgme = np.load(avgmefile)
     
     else:

@@ -34,7 +34,7 @@ def make_dataloaders(input_file_dict):
         for layer, files in layers.items(): dataloaders[era][layer] = MEDataLoader(files)
     return dataloaders
         
-def make_preprocessors(eras, layers, **kwargs):
+def make_preprocessors(eras, layers, local_normalization=None, **kwargs):
     # make a preprocessor for all eras and layers.
     # input are lists of eras and layers.
     # output is a 2-layer dict of the form era -> layer -> preprocessor.
@@ -43,7 +43,11 @@ def make_preprocessors(eras, layers, **kwargs):
         preprocessors[era] = {}
         preprocessor_era = era
         if '-part' in era: preprocessor_era = era.split('-part')[0]
-        for layer in layers: preprocessors[era][layer] = make_default_preprocessor(preprocessor_era, layer, **kwargs)
+        this_local_normalization = None
+        if local_normalization is not None: this_local_normalization = local_normalization[era]
+        for layer in layers: preprocessors[era][layer] = make_default_preprocessor(preprocessor_era, layer,
+                                                           local_normalization=this_local_normalization,
+                                                           **kwargs)
     return preprocessors    
 
 def load_nmfs(nmf_file_dict):
