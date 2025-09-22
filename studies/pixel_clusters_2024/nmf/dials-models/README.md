@@ -2,9 +2,10 @@
 
 ### References
 For general information on how to integrate a given model in DIALS, see here:
+- [dism-cli](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-cli/-/tree/develop?ref_type=heads) (which is the tool used in the examples above).
 - [dism-examples](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master?ref_type=heads).
 - In particular for this case, the [sklearn NMF example](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master/sklearn_nmf?ref_type=heads) was the main inspiration.
-- [dism-cli](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-cli/-/tree/develop?ref_type=heads) (which is the tool used in the examples above).
+- NEW: more recently, also filtering of the results by OMS data has been implemented, based on [this example](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master/src/torchscript_oms?ref_type=heads).
 
 This folder just contains one particular example, for the pixel NMF models developed in this project.
 Integration in DIALS for this projec was achieved in a long back-and-forth interaction with Gabriel (the DIALS developer),
@@ -41,6 +42,7 @@ In particular:
 
 The versions in this particular case were copied from the [sklearn NMF example](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master/sklearn_nmf?ref_type=heads),
 and modified as needed (e.g. specify multiple monitoring elements, etc).
+Further modifications were done to allow feeding OMS data (e.g. for filtering) into the model, based on [this example](https://gitlab.cern.ch/cms-ppd/technical-support/tools/dism-examples/-/tree/master/src/torchscript_oms?ref_type=heads).
 
 ### Get the dismcli tool
 The tool that parses the model into DIALS (using the config files defined in the previous step), is called DIALS Inference Service Manager (DISM).
@@ -81,3 +83,4 @@ Finally, do `dismcli package -u https://dev-cmsdials-api.web.cern.ch`.
 ### Various notes
 - You can remove the hidden directory `.dism-artifacts` to start from scratch. This is similar in concept to deleting cashes or cookies if they give issues.
 - For some reason, the docker image specified in the example `template.yaml` (namely `registry.cern.ch/docker.io/seldonio/mlserver:1.5.0`) did not work for me because of something that seemed like a denied permission issue. Instead, you can use the following one: `seldonio/mlserver:1.5.0`. Upon further discussion with Gabriel, it is really better to use the `registry.cern.ch` version of the image in DIALS. To make this work in local testing, you can first pull the `seldonio/mlserver:1.5.0` image, and then run `docker tag seldonio/mlserver:1.5.0 registry.cern.ch/docker.io/seldonio/mlserver:1.5.0`. Then you can use the `registry.cern.ch/docker.io/seldonio/mlserver:1.5.0` image in the `template.yaml` file, and it will locally redirect to the `seldonio/mlserver:1.5.0` image. When actually uploaded to DIALS, there should be no problem with accessing the `registry.cern.ch` version of the image.
+- The `test_predictions.py` script needs access to the OMS API to fetch the required data. In deployment, this is not an issue as DIALS has access to OMS directly. But for local testing, this requires a file called `omsid.py` with specifically named variables for the OMS API client ID and secret, see `test_predictions.py` for details.
