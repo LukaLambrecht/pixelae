@@ -13,6 +13,7 @@ import sys
 import numpy as np
 
 # import local modules
+import dftools as dftools
 import patternfiltering as patternfiltering
 import rebinning as rebinning
 import clustering as clustering
@@ -79,7 +80,7 @@ class PixelNMF(object):
         '''
         if sorted(list(X.keys())) != sorted(self.menames):
             msg = 'ERROR: keys of provided data and self.menames do not agree;'
-            msg += f' found {X.keys()} and {self.menames.keys()} respectively.'
+            msg += f' found {X.keys()} and {self.menames} respectively.'
             if verbose: print(msg)
             raise Exception(msg)
             
@@ -122,7 +123,7 @@ class PixelNMF(object):
         # loop over monitoring elements
         mes_preprocessed = {}
         if verbose: print('[INFO]: preprocessing...')
-        self.check_keys(X, verbose=verbose)
+        #self.check_keys(X, verbose=verbose)
         for mename in self.menames:
             if verbose: print(f'  - {mename}')
             # do basic preprocessing using preprocessors defined earlier
@@ -139,7 +140,7 @@ class PixelNMF(object):
         # loop over monitoring elements
         mes_reco = {}
         if verbose: print('[INFO]: running inference...')
-        self.check_keys(X, verbose=verbose)
+        #self.check_keys(X, verbose=verbose)
         for mename in self.menames:
             if verbose: print(f'  - {mename}')
             X_input = np.copy(X[mename])
@@ -175,8 +176,8 @@ class PixelNMF(object):
         # loop over monitoring elements
         losses = {}
         if verbose: print('[INFO]: calculating losses...')
-        self.check_keys(X_input, verbose=verbose)
-        self.check_keys(X_reco, verbose=verbose)
+        #self.check_keys(X_input, verbose=verbose)
+        #self.check_keys(X_reco, verbose=verbose)
         for mename in self.menames:
             if verbose: print(f'  - {mename}')
             # calculate losses
@@ -195,7 +196,7 @@ class PixelNMF(object):
         
         # overlay different monitoring elements
         if verbose: print('[INFO]: overlaying layers...')
-        self.check_keys(X_loss, verbose=verbose)
+        #self.check_keys(X_loss, verbose=verbose)
         target_shape = X_loss[self.menames[0]].shape[1:3]
         losses_combined = np.zeros(X_loss[self.menames[0]].shape)
         for mename in self.menames:
@@ -232,20 +233,22 @@ class PixelNMF(object):
         flags = patternfiltering.contains_any_pattern(X_loss, self.flagging_patterns, threshold = 1e-3)
         return flags
     
-    def get_filter_mask(self, X_input, verbose=False):
+    def get_filter_mask(self, X_input, oms_data=None, verbose=False):
         '''
         Apply filters.
-        Note: for now only min. number of entries filter implemented, as it is inherent in the data;
-              other filters that require external info (like trigger rate, pileup, and DCS bits) to do later.
+        Note: HLT rate filter not yet implemented.
         Note: filters hard-coded in this function for now, maybe generalize later.
         Input arguments:
-        - X_input: dictionary of the following form {monitoring element name: data (2D np array), ...} with input data.
+        - X_input: dictionary of the following form {monitoring element name: data (3D np array), ...} with input data.
+        - oms_data: dictionary of the following form {OMS attribute name: data (1D np array), ...} with OMS info.
+                    note: for now, the lumisections in oms_data are assumed to exactly match those in X_input,
+                          maybe generalize and make more robust later.
         '''
         
         # initializations
         if verbose: print('[INFO]: applying filter...')
-        firstkey = list(X_input.keys())[0]
-        mask = np.ones(len(X_input[firstkey])).astype(bool)
+        menames = sorted(list(X_input.keys()))
+        mask = np.ones(len(X_input[menames[0]])).astype(bool)
         
         # define minimum entries filter
         min_entries_filter = {
@@ -254,26 +257,46 @@ class PixelNMF(object):
             'BPix3': 0.5e6/3,
             'BPix4': 0.5e6/4
         }
-        
-        # check keys
-        self.check_keys(X_input, verbose=verbose)
-        if sorted(list(min_entries_filter.keys()))!=sorted(self.menames):
-            msg = 'ERROR: keys of min_entries_filter and self.menames do not agree;'
-            msg += f' found {min_entries_filter.keys()} and {self.menames.keys()} respectively.'
-            if verbose: print(msg)
-            raise Exception(msg)
-        
-        # apply minimum number of entries filter
-        for mename in self.menames:
-            threshold = min_entries_filter[mename]
-            values = np.sum(X_input[mename], axis=(1,2))
-            this_mask = (values > threshold).astype(bool)
-            mask = (mask & this_mask)
-            if verbose:
-                ntot = len(this_mask)
-                npass = np.sum(this_mask.astype(int))
-                print(f'[INFO]: min. entries mask for {mename}: {npass} / {ntot} passing lumisections.')
-        
+
+        # get number of entries per monitoring element
+        entries = {}
+        for mename in menames:
+            entries[mename] = np.sum(X_input[mename], axis=(1,2))
+
+        # define run numbers and lumisection numbers
+        run_numbers = np.zeros(len(mask))
+        ls_numbers = np.zeros(len(mask))
+        if oms_data is not None:
+            run_numbers = oms_data['run_number']
+            ls_numbers = oms_data['lumisection_number']
+
+        # define OMS filters
+        oms_filters = None
+        if oms_data is not None:
+            oms_filters = [
+              ["beams_stable"],
+              ["cms_active"],
+              ["bpix_ready"],
+              ["fpix_ready"],
+              ["tibtid_ready"],
+              ["tob_ready"],
+              ["tecp_ready"],
+              ["tecm_ready"],
+              ["pileup", '>', 25],
+              ["hlt_zerobias_rate", '>', 5]
+            ]
+            for oms_filter in oms_filters:
+                key = oms_filter[0]
+                if key not in oms_data.keys():
+                    msg = f'Provided OMS data does not contain the expected key {key}'
+                    raise Exception(msg)
+
+        # apply the filter
+        mask, _ = dftools.filter_lumisections(run_numbers, ls_numbers,
+                    entries = entries, min_entries_filter = min_entries_filter,
+                    oms_info = oms_data, oms_filters = oms_filters,
+                  )
+
         # total mask printouts
         if verbose:
             ntot = len(mask)
@@ -287,22 +310,50 @@ class PixelNMF(object):
         '''
         Run full chain on incoming data X
         '''
-        
-        if verbose:
-            print('[INFO]: Running PixelNMF.predict on the following data:')
-            for key, val in X.items():
-                print(f'  - {key}: {val.shape}')
-        
+
+        # printouts for testing and debugging
+        print('[INFO]: Running PixelNMF.predict on the following data:')
+        for key, val in X.items():
+            print(f'  - {key}: {val.shape}')
+
+        # split actual input data from OMS data
+        menames = ['BPix1', 'BPix2', 'BPix3', 'BPix4']
+        X_input = {key: val for key, val in X.items() if key in menames}
+        oms_input = {key: val for key, val in X.items() if key not in menames}
+        # format the names of the meta-data fields
+        oms_input = {key.split('__')[1]: val for key, val in oms_input.items()}
+        # printouts for testing and debugging
+        print('Found following OMS keys for filtering:')
+        print(oms_input.keys())
+        if len(oms_input.keys())==0: oms_input = None
+
         # do preprocessing, inference, and loss calculation
-        mes_preprocessed = self.preprocess(X, verbose=verbose)
+        mes_preprocessed = self.preprocess(X_input, verbose=verbose)
         mes_reco = self.infer(mes_preprocessed, verbose=verbose)
         losses = self.loss(mes_preprocessed, mes_reco, do_thresholding=True, verbose=verbose)
         losses_combined = self.combine(losses, do_masking=True, do_thresholding=True, verbose=verbose)
         flags = self.flag(losses_combined, verbose=verbose)
+
+        # printouts for testing and debugging
+        nflags = np.sum(flags.astype(int))
+        msg = '[INFO]: Flagging results (before filtering):'
+        msg += f' flagged {nflags} out of {len(flags)} lumisections.'
+        print(msg)
         
         # apply mask
-        mask = self.get_filter_mask(X, verbose=verbose)
+        mask = self.get_filter_mask(X_input, oms_data=oms_input, verbose=verbose)
         flags[~mask] = False
+
+        # printouts for testing and debugging
+        nselected = np.sum(mask.astype(int))
+        msg = f'[INFO]: Filtering: selected {nselected} out of {len(flags)} lumisections.'
+        print(msg)
+        nflags = np.sum(flags.astype(int))
+        msg = '[INFO]: Flagging results (after filtering):'
+        msg += f' flagged {nflags} out of {len(mask)} lumisections.'
+        print(msg)
+        sys.stdout.flush()
+        sys.stderr.flush()
         
         # return final result
         return flags

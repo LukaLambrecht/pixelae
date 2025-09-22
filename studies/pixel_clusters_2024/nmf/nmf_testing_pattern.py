@@ -15,8 +15,7 @@ thisdir = os.getcwd()
 topdir = os.path.abspath(os.path.join(thisdir, '../../../'))
 sys.path.append(topdir)
 from tools.dataloadertools import MEDataLoader
-from tools.omstools import find_oms_attr_for_lumisections
-from tools.omstools import find_hlt_rate_for_lumisections
+import tools.dftools as dftools
 import tools.patternfiltering as patternfiltering
 import tools.rebinning as rebinning
 import tools.clustering as clustering
@@ -82,77 +81,6 @@ def run_evaluation_batch(batch_paramset, dataloaders, nmfs, **kwargs):
     # return the result
     return output
 
-def filter_dfs(dfs,
-               min_entries_filter = None,
-               oms_info = None,
-               oms_filters = None,
-               hltrate_info = None,
-               hltrate_filters = None):
-    '''
-    Filter a set of dataframes.
-    Input arguments:
-    - dfs: dict of dataframes of the form layer -> dataframe
-    - min_entries_filter: dict of the form layer -> miminum number of entries per LS
-      (requires each dataframe to have a column "entries" in it).
-    '''
-    
-    # initializations
-    filter_results = {}
-    layers = list(dfs.keys())
-    run_numbers = dfs[layers[0]]['run_number'].values
-    ls_numbers = dfs[layers[0]]['ls_number'].values
-    combined_mask = np.ones(len(dfs[layers[0]])).astype(bool)
-    
-    # minimum number of entries filter
-    if min_entries_filter is not None:
-        for layer in layers:
-            threshold = min_entries_filter[layer]
-            mask = (dfs[layer]['entries'] > threshold)
-            # add to the total mask
-            combined_mask = ((combined_mask) & (mask))
-            # keep track of lumisections that fail
-            fail = [(run, ls) for run, ls in zip(run_numbers[~mask], ls_numbers[~mask])]
-            filter_results[f'min_entries_{layer}'] = fail
-            
-    # OMS attribute filters
-    if oms_filters is not None:
-        for oms_filter in oms_filters:
-            if len(oms_filter)==1:
-                key = oms_filter[0]
-                filterstr = key
-                mask = find_oms_attr_for_lumisections(run_numbers, ls_numbers, oms_info, key).astype(bool)
-            elif len(oms_filter)==3:
-                key, operator, target = oms_filter
-                filterstr = f'{key} {operator} {target}'
-                values = find_oms_attr_for_lumisections(run_numbers, ls_numbers, oms_info, key)
-                mask = eval(f'values {operator} {target}', {'values': values})
-            else:
-                raise Exception(f'Filter {oms_filter} not recognized.')
-            # add to the total mask
-            combined_mask = ((combined_mask) & (mask))
-            # keep track of lumisections that fail
-            fail = [(run, ls) for run, ls in zip(run_numbers[~mask], ls_numbers[~mask])]
-            filter_results[filterstr] = fail
-            
-    # HLT rate filters
-    if hltrate_filters is not None:
-        for hltrate_filter in hltrate_filters:
-            if len(hltrate_filter)==3:
-                key, operator, target = hltrate_filter
-                filterstr = f'{key} {operator} {target}'
-                values = find_hlt_rate_for_lumisections(run_numbers, ls_numbers, hltrate_info, key)
-                mask = eval(f'values {operator} {target}', {'values': values})
-            else:
-                raise Exception(f'Filter {hltrate_filter} not recognized.')
-            # add to the total mask
-            combined_mask = ((combined_mask) & (mask))
-            # keep track of lumisections that fail
-            fail = [(run, ls) for run, ls in zip(run_numbers[~mask], ls_numbers[~mask])]
-            filter_results[filterstr] = fail
-    
-    # return results
-    return (combined_mask, filter_results)
-    
 def run_evaluation(dfs, nmfs,
                      preprocessors = None,
                      min_entries_filter = None,
@@ -175,7 +103,7 @@ def run_evaluation(dfs, nmfs,
     
     # filtering
     ndf = len(dfs[layers[0]])
-    mask, filter_results = filter_dfs(dfs,
+    mask, filter_results = dftools.filter_dfs(dfs,
                              min_entries_filter = min_entries_filter,
                              oms_info = oms_info,
                              oms_filters = oms_filters,

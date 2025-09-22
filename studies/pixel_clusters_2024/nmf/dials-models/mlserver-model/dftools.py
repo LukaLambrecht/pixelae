@@ -16,6 +16,8 @@ import pandas as pd
 
 # local modules
 import jsontools as jsontools
+from omstools import find_oms_attr_for_lumisections
+from omstools import find_hlt_rate_for_lumisections
 
 
 # getter and selector for histogram names 
@@ -159,3 +161,112 @@ def get_mes(df, datacolumn='data', xbinscolumn='xbins', ybinscolumn='ybins',
     runs = df[runcolumn].values
     lumis = df[lumicolumn].values
     return (mes, runs, lumis)
+
+
+# advanced filtering
+
+def filter_lumisections(run_numbers, ls_numbers,
+        entries = None,
+        min_entries_filter = None,
+        oms_info = None,
+        oms_filters = None,
+        hltrate_info = None,
+        hltrate_filters = None):
+    '''
+    Helper function to filter_dfs that does not rely on the actual dataframes.
+    Can also be used standalone as an equivalent to filter_dfs,
+    if the dataframes are not available but the equivalent information is.
+    Input arguments:
+    - run_numbers and ls_numbers: equally long 1D numpy arrays with run and lumisection numbers.
+    - entries: dict of the form {<ME name>: <array with number of entries>, ...}.
+               note: the array with number of entries is supposed to correspond to
+                     run_numbers and ls_numbers; maybe generalize later.
+    - min_entries_filter: dict of the form {<ME name>: <minimum number of entries for this ME>}.
+    '''
+
+    # initializations
+    filter_results = {}
+    combined_mask = np.ones(len(run_numbers)).astype(bool)
+
+    # initialize ME names for min. entries filter
+    menames = None
+    if entries is not None and min_entries_filter is not None:
+        menames = sorted(list(entries.keys()))
+        testkeys = sorted(list(min_entries_filter.keys()))
+        if menames != testkeys:
+            msg = 'Keys in provided entries and min_entries_filter do not agree;'
+            msg += f' found {menames} and {testkeys} respectively.'
+            raise Exception(msg)
+
+    # minimum number of entries filter
+    if min_entries_filter is not None:
+        for mename in menames:
+            threshold = min_entries_filter[mename]
+            mask = (entries[mename] > threshold)
+            # add to the total mask
+            combined_mask = ((combined_mask) & (mask))
+            # keep track of lumisections that fail
+            fail = [(run, ls) for run, ls in zip(run_numbers[~mask], ls_numbers[~mask])]
+            filter_results[f'min_entries_{mename}'] = fail
+
+    # OMS attribute filters
+    if oms_filters is not None:
+        for oms_filter in oms_filters:
+            if len(oms_filter)==1:
+                key = oms_filter[0]
+                filterstr = key
+                mask = find_oms_attr_for_lumisections(run_numbers, ls_numbers, oms_info, key).astype(bool)
+            elif len(oms_filter)==3:
+                key, operator, target = oms_filter
+                filterstr = f'{key} {operator} {target}'
+                values = find_oms_attr_for_lumisections(run_numbers, ls_numbers, oms_info, key)
+                mask = eval(f'values {operator} {target}', {'values': values})
+            else:
+                raise Exception(f'Filter {oms_filter} not recognized.')
+            # add to the total mask
+            combined_mask = ((combined_mask) & (mask))
+            # keep track of lumisections that fail
+            fail = [(run, ls) for run, ls in zip(run_numbers[~mask], ls_numbers[~mask])]
+            filter_results[filterstr] = fail
+
+    # HLT rate filters
+    if hltrate_filters is not None:
+        for hltrate_filter in hltrate_filters:
+            if len(hltrate_filter)==3:
+                key, operator, target = hltrate_filter
+                filterstr = f'{key} {operator} {target}'
+                values = find_hlt_rate_for_lumisections(run_numbers, ls_numbers, hltrate_info, key)
+                mask = eval(f'values {operator} {target}', {'values': values})
+            else:
+                raise Exception(f'Filter {hltrate_filter} not recognized.')
+            # add to the total mask
+            combined_mask = ((combined_mask) & (mask))
+            # keep track of lumisections that fail
+            fail = [(run, ls) for run, ls in zip(run_numbers[~mask], ls_numbers[~mask])]
+            filter_results[filterstr] = fail
+
+    # return results
+    return (combined_mask, filter_results)
+
+def filter_dfs(dfs, min_entries_filter=None, **kwargs):
+    '''
+    Filter a set of dataframes.
+    Input arguments:
+    - dfs: dict of dataframes of the form ME name -> dataframe
+    '''
+
+    # extract information from dataframes
+    menames = sorted(list(dfs.keys()))
+    run_numbers = dfs[menames[0]]['run_number'].values
+    ls_numbers = dfs[menames[0]]['ls_number'].values
+    entries = None
+    if min_entreis_filters is not None:
+        entries = {}
+        for mename in menames:
+            entries[mename] = dfs[mename]['entries'].values
+
+    # return results
+    return filter_data(run_numbers, ls_numbers,
+            entries = entries,
+            min_entries_filter = min_entries_filter,
+            **kwargs)

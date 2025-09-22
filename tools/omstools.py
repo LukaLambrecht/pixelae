@@ -28,11 +28,14 @@ def find_oms_indices(runs, lumis, omsjson,
         raise Exception(f'Provided run numbers array has unexpected shape: {runs.shape}')
     if len(lumis.shape)!=1:
         raise Exception(f'Provided lumisection numbers array has unexpected shape: {lumis.shape}')
+    # make sure provided oms runs and lumis are in the same data format
+    omsruns = np.array(omsjson[run_key]).astype(int)
+    omslumis = np.array(omsjson[lumi_key]).astype(int)
     # combine run and lumisection number into a single unique number
     idfactor = 10000 # warning: do not use 1e4 instead of 10000 to avoid conversion from int to float
     ids = runs*idfactor + lumis
     ids = ids.astype(int)
-    omsids = np.array(omsjson[run_key])*idfactor + np.array(omsjson[lumi_key])
+    omsids = omsruns*idfactor + omslumis
     omsids = omsids.astype(int)
     # check if all ids are in omsids
     # note: reduce from error to warning,

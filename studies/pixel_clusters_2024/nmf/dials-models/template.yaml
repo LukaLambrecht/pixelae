@@ -5,6 +5,8 @@ Resources:
     Type: InferenceService::MLServer::SKLearn
     Workspace: global
     Properties:
+
+      # general properties
       Description: Spot anomalies in the pixel cluster occupancy (barrel layers)
       Name: pixel-barrel-nmf
       Image: registry.cern.ch/docker.io/seldonio/mlserver:1.5.0
@@ -13,6 +15,86 @@ Resources:
       FlaggingKey: Flag
       MetricKey: Metric
       BuiltinThreshold: true
+
+      # set conditions for running inference
+      InferenceOnConditions:
+        StableBeams: True
+        FillType: PROTONS
+        AllowedPrimaryDatasets:
+          - ZeroBias
+
+      # extra input data from OMS
+      InputMetadata:
+        - Name: general
+          Source: OMS
+          Endpoint: lumisections
+          Attributes:
+            - Name: run_number
+              DataType: TYPE_INT32
+              Dims:
+                - -1
+            - Name: ls_number
+              DataType: TYPE_INT32
+              Dims:
+                - -1
+        - Name: pileup
+          Source: OMS
+          Endpoint: lumisections
+          Attributes:
+            - Name: pileup
+              DataType: TYPE_FP32
+              Dims:
+                - -1
+        - Name: hlt_zerobias
+          Source: OMS
+          Endpoint: hltpathrates
+          Filter:
+            - Name: path_name
+              Value: HLT_ZeroBias_v\d+
+              Operation: LIST_AND_MATCH
+          Attributes:
+            - Name: hlt_zerobias_rate
+              DataType: TYPE_FP32
+              Dims:
+                - -1
+        - Name: dcs_bits
+          Source: OMS
+          Endpoint: lumisections
+          Attributes:
+            - Name: cms_active
+              DataType: TYPE_BOOL
+              Dims:
+                - -1
+            - Name: beams_stable
+              DataType: TYPE_BOOL
+              Dims:
+                - -1
+            - Name: bpix_ready
+              DataType: TYPE_BOOL
+              Dims:
+                - -1
+            - Name: fpix_ready
+              DataType: TYPE_BOOL
+              Dims:
+                - -1
+            - Name: tibtid_ready
+              DataType: TYPE_BOOL
+              Dims:
+                - -1
+            - Name: tob_ready
+              DataType: TYPE_BOOL
+              Dims:
+                - -1
+            - Name: tecp_ready
+              DataType: TYPE_BOOL
+              Dims:
+                - -1
+            - Name: tecm_ready
+              DataType: TYPE_BOOL
+              Dims:
+                - -1
+
+      # input data
       InputSignature:
         - Name: BPix1
           MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_1

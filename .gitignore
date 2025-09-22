@@ -30,6 +30,7 @@ datadials/.cache/
 
 # ignore oms api secret
 tools/omsapi/clientid.py
+**omsid.py
 
 # ignore automask output
 automasking/data
