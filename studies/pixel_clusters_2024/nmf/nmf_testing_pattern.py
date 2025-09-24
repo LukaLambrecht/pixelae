@@ -8,6 +8,7 @@ import time
 import joblib
 import importlib
 import numpy as np
+import scipy as sp
 import pandas as pd
 
 # local modules
@@ -160,7 +161,9 @@ def run_evaluation(dfs, nmfs,
                      automask_map_preprocessors = None,
                      do_loss_masking = False,
                      loss_masks = None,
-                     loss_mask_preprocessors = None):
+                     loss_mask_preprocessors = None,
+                     do_dynamic_loss_masking = False,
+                     dynamic_loss_masking_window = None):
     
     # initializations
     layers = list(dfs.keys())
@@ -229,23 +232,26 @@ def run_evaluation(dfs, nmfs,
             automask_maps = automask_map_preprocessors[layer].preprocess_mes(automask_maps, None, None)
             losses[layer] *= automask_maps
         
-    # thresholding
+    # thresholding and clustering
+    losses_thresholded = {}
+    print('      Thresholding and clustering...')
     if pattern_thresholds is not None:
-        print('      Thresholding...')
         for layer in layers:
-            losses[layer] = clustering.cluster_loss_multithreshold(losses[layer], pattern_thresholds)
-        
+            losses_thresholded[layer] = clustering.cluster_loss_multithreshold(losses[layer], pattern_thresholds)
+    else: raise Exception('Default behaviour for this case not yet implemented.')
+
     # overlay different layers
     # strategy: sum the (rebinned) binary loss maps over different layers.
     print('      Combining layers...')
     target_shape = losses[layers[0]].shape[1:3]
     losses_combined = np.zeros(losses[layers[0]].shape)
     for layer in layers:
-        losses_rebinned = rebinning.rebin_keep_clip(losses[layer], target_shape, 1, mode='cv2')
+        losses_rebinned = rebinning.rebin_keep_clip(losses_thresholded[layer], target_shape, 1, mode='cv2')
         losses_combined += losses_rebinned
-    
+
     # optional: do loss masking
     loss_mask = np.zeros(losses_combined.shape)
+    preprocessed_loss_masks_per_layer = {}
     if do_loss_masking:
         print('      Applying loss mask...')
         loss_mask = np.zeros((1, target_shape[0], target_shape[1]))
@@ -256,14 +262,42 @@ def run_evaluation(dfs, nmfs,
             this_loss_mask = loss_mask_preprocessors[layer].preprocess_mes(this_loss_mask, None, None)
             # invert
             this_loss_mask = 1 - this_loss_mask
+            # store at this stage for later use
+            preprocessed_loss_masks_per_layer[layer] = this_loss_mask
             # rescale
             this_loss_mask = rebinning.rebin_keep_clip(this_loss_mask, target_shape, 1, mode='cv2')
             # add to total
             loss_mask += this_loss_mask
         loss_mask = np.repeat(loss_mask, len(losses_combined), axis=0)
-  
+
+    # optional: do dynamic loss masking
+    dynamic_loss_mask = np.zeros(losses_combined.shape)
+    if do_dynamic_loss_masking:
+        print('      Calculating and applying dynamic loss mask...')
+        window = np.concatenate((np.zeros(dynamic_loss_masking_window+1),
+                                 np.ones(dynamic_loss_masking_window))).astype(float)
+        window /= np.sum(window)
+        for layer in layers:
+            # re-calculate binary threshold on loss
+            # note: cannot use the thresholded loss calculated above since it is implicitly clustered,
+            #       while here we need bin-per-bin values.
+            # note: for the thresholding, an arbitrary choice has to be made
+            #       (since multiple thresholds with corresponding clustering patterns can be provided);
+            #       here we just pick the first element in the provided list.
+            threshold = pattern_thresholds[0]['loss_threshold']
+            loss_binary = (losses[layer] > threshold).astype(int)
+            # exclude static loss mask for dynamic mask calculation
+            this_static_loss_mask = 1 - preprocessed_loss_masks_per_layer[layer]
+            loss_binary = np.multiply(loss_binary, np.repeat(this_static_loss_mask, len(loss_binary), axis=0))
+            # calculate dynamic loss mask for this layer
+            this_dynamic_loss_mask = sp.ndimage.convolve1d(loss_binary.astype(float), window, axis=0, mode='constant')
+            this_dynamic_loss_mask = (this_dynamic_loss_mask >= 0.999).astype(int)
+            # rescale and add to total
+            this_dynamic_loss_mask = rebinning.rebin_keep_clip(this_dynamic_loss_mask, target_shape, 1, mode='cv2')
+            dynamic_loss_mask += this_dynamic_loss_mask
+
     # apply threshold on combined binary loss
-    losses_combined = ((losses_combined >= 2) & (losses_combined > loss_mask)).astype(int)
+    losses_combined = ((losses_combined >= 2) & (losses_combined > (loss_mask + dynamic_loss_mask))).astype(int)
     
     # search for patterns in the combined loss
     print('      Searching for patterns in the loss map...')
@@ -313,6 +347,7 @@ def evaluate(config):
     pattern_thresholds = config['pattern_thresholds']
     do_automasking = config['do_automasking']
     do_loss_masking = config['do_loss_masking']
+    do_dynamic_loss_masking = config['do_dynamic_loss_masking']
 
     # read filters if needed
     min_entries_filter = config['min_entries_filter'] if 'min_entries_filter' in config.keys() else None
@@ -355,6 +390,18 @@ def evaluate(config):
                 loss_mask = (loss_mask < config['loss_masking_zero_frac_threshold'])
                 loss_masks[era][layer] = loss_mask
         for layer in layers: loss_mask_preprocessors[layer] = PreProcessor(f'PXLayer_{layer}')
+            
+    # read dynamic loss masking settings if needed
+    dynamic_loss_masking_window = None
+    if do_dynamic_loss_masking:
+        key = 'dynamic_loss_masking_window'
+        if key in config.keys():
+            dynamic_loss_masking_window = int(config[key])
+        else:
+            dynamic_loss_masking_window = 10
+            msg = 'WARNING: dynamic loss masking was requested,'
+            msg += f' but no window is set; using default of {dynamic_loss_masking_window}.'
+            print(msg)
 
     # initialize result
     batch_outputs = []
@@ -389,7 +436,9 @@ def evaluate(config):
                                                  automask_map_preprocessors = automask_map_preprocessors,
                                                  do_loss_masking = do_loss_masking,
                                                  loss_masks = None if loss_masks is None else loss_masks[era],
-                                                 loss_mask_preprocessors = loss_mask_preprocessors)
+                                                 loss_mask_preprocessors = loss_mask_preprocessors,
+                                                 do_dynamic_loss_masking = do_dynamic_loss_masking,
+                                                 dynamic_loss_masking_window = dynamic_loss_masking_window)
             batch_outputs.append(batch_output)
 
     # contatenate the result
@@ -415,6 +464,11 @@ if __name__=='__main__':
     for key, lslist in output['filter_results'].items():
         for idx, (run, lumi) in enumerate(lslist):
             lslist[idx] = (int(run), int(lumi))
+            
+    # printouts for checking and debugging
+    nflags = len(output['flagged_run_numbers'])
+    print(f'Summarized results from running over config {configfile}:')
+    print(f'  - Number of flagged lumisections: {nflags}.')
 
     # write output file
     outputfile = config['outputfile']
