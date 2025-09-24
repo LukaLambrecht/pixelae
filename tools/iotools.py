@@ -74,7 +74,7 @@ def read_parquet(path, verbose=False,
 def read_lumisections(path, run_numbers, ls_numbers,
                       verbose=False, columns=None,
                       run_column='run_number', ls_column='ls_number',
-                      mode='pyarrow'):
+                      mode='batched'):
     """
     Read specific lumisections from a file or list of files
     Note: can be slow, do not use for many lumisections.
@@ -120,7 +120,7 @@ def read_lumisections(path, run_numbers, ls_numbers,
 def read_runs(path, run_numbers,
               verbose=False, columns=None,
               run_column='run_number',
-              mode='pyarrow'):
+              mode='batched'):
     """
     Read specific runs from a file or list of files
     """

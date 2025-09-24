@@ -262,13 +262,13 @@ def filter_dfs(dfs, min_entries_filter=None, **kwargs):
     run_numbers = dfs[menames[0]]['run_number'].values
     ls_numbers = dfs[menames[0]]['ls_number'].values
     entries = None
-    if min_entreis_filters is not None:
+    if min_entries_filter is not None:
         entries = {}
         for mename in menames:
             entries[mename] = dfs[mename]['entries'].values
 
     # return results
-    return filter_data(run_numbers, ls_numbers,
+    return filter_lumisections(run_numbers, ls_numbers,
             entries = entries,
             min_entries_filter = min_entries_filter,
             **kwargs)

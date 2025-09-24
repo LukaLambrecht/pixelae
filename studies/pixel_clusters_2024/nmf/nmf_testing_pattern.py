@@ -30,7 +30,14 @@ def make_dataloaders(input_file_dict):
     dataloaders = {}
     for era, layers in input_file_dict.items():
         dataloaders[era] = {}
-        for layer, files in layers.items(): dataloaders[era][layer] = MEDataLoader(files)
+        for layer, files in layers.items(): dataloaders[era][layer] = MEDataLoader(files, verbose=False)
+    print('Initiated the following data loaders:')
+    for era, layers in dataloaders.items():
+        print(f'  - Era {era}:')
+        for layer, dataloader in layers.items():
+            nfiles = len(dataloader.parquet_files)
+            nrows = sum(dataloader.nrows)
+            print(f'    - Layer {layer}: data loader with {nfiles} files and {nrows} rows.')
     return dataloaders
         
 def make_preprocessors(eras, layers, local_normalization=None, **kwargs):
@@ -69,7 +76,7 @@ def run_evaluation_batch(batch_paramset, dataloaders, nmfs, **kwargs):
     dfs = {}
     layers = list(dataloaders.keys())
     for layer in layers:
-        dfs[layer] = dataloaders[layer].read_sequential_batch(batch_paramset)
+        dfs[layer] = dataloaders[layer].read_batch(batch_paramset)
     
     # run the evaluation on this data
     output = run_evaluation(dfs, nmfs, **kwargs)
@@ -243,6 +250,7 @@ def evaluate(config):
     
     # get evaluation settings
     batch_size = config['batch_size']
+    target_batch_size = config['target_batch_size']
     flagging_patterns = [np.array(el) for el in config['flagging_patterns']]
     flagging_threshold = config['flagging_threshold']
     pattern_thresholds = config['pattern_thresholds']
@@ -298,15 +306,19 @@ def evaluate(config):
     
     # loop over eras
     for era in eras:
-        print(f'Era {era}...')
+        print(f'Now running on era {era}...')
         
         # prepare batch parameters
         # (common to all layers)
-        batch_params = dataloaders[era][layers[0]].prepare_sequential_batches(batch_size=batch_size)
+        kwargs = {}
+        if batch_size == 'run': kwargs['target_size'] = target_batch_size
+        batch_params = dataloaders[era][layers[0]].prepare_sequential_batches(batch_size=batch_size, **kwargs)
+        nbatches = len(batch_params)
+        print(f'Prepared {nbatches} batches of size {batch_size}.')
 
         # run over batches
         for batchidx, batch_paramset in enumerate(batch_params):
-            print(f'  Batch {batchidx+1}...')
+            print(f'  Now running on batch {batchidx+1} / {nbatches}...')
             batch_results = run_evaluation_batch(batch_paramset, dataloaders[era], nmfs[era],
                                                  preprocessors = preprocessors[era],
                                                  min_entries_filter = min_entries_filter,
@@ -357,6 +369,7 @@ if __name__=='__main__':
     
     # read job config
     configfile = sys.argv[1]
+    print(f'Reading job config "{configfile}"...')
     with open(configfile, 'r') as f:
         config = json.load(f)
         
@@ -376,3 +389,5 @@ if __name__=='__main__':
     if not os.path.exists(outputdir): os.makedirs(outputdir)
     with open(outputfile, 'w') as f:
         json.dump(output, f)
+    print(f'Output file "{outputfile}" written.')
+    print('Done.')
