@@ -64,22 +64,79 @@ def load_nmfs(nmf_file_dict):
         nmfs[era] = {}
         for layer, modelfile in layers.items(): nmfs[era][layer] = joblib.load(modelfile)
     return nmfs
+
+def concatenate_output(outputs):
+    # concatenate the outputs of run_evaluation
+    
+    # make lists
+    batch_filter_results = []
+    batch_flagged_run_numbers = []
+    batch_flagged_ls_numbers = []
+    for output in outputs:
+        if output is None: continue
+        batch_filter_results.append(output['filter_results'])
+        if len(output['flagged_run_numbers'])>0:
+            batch_flagged_run_numbers.append(output['flagged_run_numbers'])
+            batch_flagged_ls_numbers.append(output['flagged_ls_numbers'])
+
+    # contatenate the lists
+    filter_results = {}
+    if len(batch_filter_results)>0:
+        for key in batch_filter_results[0].keys():
+            filter_results[key] = sum([batch_filter_result[key] for batch_filter_result in batch_filter_results], [])
+    if len(batch_flagged_run_numbers) > 0:
+        flagged_run_numbers = np.concatenate(batch_flagged_run_numbers)
+        flagged_ls_numbers = np.concatenate(batch_flagged_ls_numbers)
+    else:
+        flagged_run_numbers = np.array([])
+        flagged_ls_numbers = np.array([])
+    
+    # make final result
+    res = {
+        'flagged_run_numbers': flagged_run_numbers,
+        'flagged_ls_numbers': flagged_ls_numbers,
+        'filter_results': filter_results
+    }
+    return res
         
 def run_evaluation_batch(batch_paramset, dataloaders, nmfs, **kwargs):
     # run evaluation on a single batch.
-    # helper function to evaluate(), see below.
     
     # initializations
     start_time = time.time()
     
-    # get the dataframes
+    # load the batch
+    # (i.e. read the dataframes for this batch from file)
     dfs = {}
     layers = list(dataloaders.keys())
     for layer in layers:
         dfs[layer] = dataloaders[layer].read_batch(batch_paramset)
+        
+    # determine runs in this batch
+    # note: this is not strictly needed, but is used to split evaluation per run.
+    # note: alternatively, one could define and read the batches as individual runs,
+    #       but that is much slower.
+    # note: this makes most sense if the batches are defined as groups of runs rather than fixed-size batches,
+    #       else runs might be split in half and be present in multiple batches;
+    #       for the most part, it doesn't matter as lumisections are evaluated independently,
+    #       but one exception is dynamic masking.
+    run_column = 'run_number'
+    runs = np.unique(dfs[layers[0]][run_column].values)
     
-    # run the evaluation on this data
-    output = run_evaluation(dfs, nmfs, **kwargs)
+    # loop over runs
+    run_outputs = []
+    for run in runs:
+        print(f'    Now running on run {run}...')
+        this_dfs = {}
+        for layer in layers:
+            this_dfs[layer] = dftools.select_runs(dfs[layer], [run], runcolumn=run_column)
+    
+        # run the evaluation on this data
+        output = run_evaluation(this_dfs, nmfs, **kwargs)
+        run_outputs.append(output)
+        
+    # concatenate outputs
+    output = concatenate_output(run_outputs)
     
     # calculate time spent for this batch
     end_time = time.time()
@@ -119,7 +176,7 @@ def run_evaluation(dfs, nmfs,
     for layer in layers:
         dfs[layer] = dfs[layer][mask]
     ndfnew = len(dfs[layers[0]])    
-    print(f'    Found {ndfnew} / {ndf} instances passing filters.')
+    print(f'      Found {ndfnew} / {ndf} instances passing filters.')
     
     # safety for 0 instances passing filters
     if ndfnew==0:
@@ -133,7 +190,7 @@ def run_evaluation(dfs, nmfs,
     # do preprocessing
     mes_preprocessed = {}
     if preprocessors is not None:
-        print('    Preprocessing...')
+        print('      Preprocessing...')
         for layer in layers: mes_preprocessed[layer] = preprocessors[layer].preprocess(dfs[layer])
     else:
         for layer in layers: mes_preprocessed[layer], _, _ = dftools.get_mes(df,
@@ -141,7 +198,7 @@ def run_evaluation(dfs, nmfs,
                                        runcolumn='run_number', lumicolumn='ls_number')
     
     # do evaluation
-    print('    Evaluating...')
+    print('      Evaluating...')
     losses = {}
     for layer in layers:
         # make a copy for some additional processing before inference
@@ -163,7 +220,7 @@ def run_evaluation(dfs, nmfs,
     
     # optional: do automasking
     if do_automasking:
-        print('    Applying automask...')
+        print('      Applying automask...')
         runs = dfs[layer[0]]['run_number'].values
         lumis = dfs[layer[0]]['ls_number'].values
         for layer in layers:
@@ -174,13 +231,13 @@ def run_evaluation(dfs, nmfs,
         
     # thresholding
     if pattern_thresholds is not None:
-        print('    Thresholding...')
+        print('      Thresholding...')
         for layer in layers:
             losses[layer] = clustering.cluster_loss_multithreshold(losses[layer], pattern_thresholds)
         
     # overlay different layers
     # strategy: sum the (rebinned) binary loss maps over different layers.
-    print('    Combining layers...')
+    print('      Combining layers...')
     target_shape = losses[layers[0]].shape[1:3]
     losses_combined = np.zeros(losses[layers[0]].shape)
     for layer in layers:
@@ -190,7 +247,7 @@ def run_evaluation(dfs, nmfs,
     # optional: do loss masking
     loss_mask = np.zeros(losses_combined.shape)
     if do_loss_masking:
-        print('    Applying loss mask...')
+        print('      Applying loss mask...')
         loss_mask = np.zeros((1, target_shape[0], target_shape[1]))
         for layer in layers:
             this_loss_mask = loss_masks[layer]
@@ -209,7 +266,7 @@ def run_evaluation(dfs, nmfs,
     losses_combined = ((losses_combined >= 2) & (losses_combined > loss_mask)).astype(int)
     
     # search for patterns in the combined loss
-    print('    Searching for patterns in the loss map...')
+    print('      Searching for patterns in the loss map...')
     flags = patternfiltering.contains_any_pattern(losses_combined, flagging_patterns,
               threshold = flagging_threshold)
     
@@ -217,7 +274,7 @@ def run_evaluation(dfs, nmfs,
     flagged_run_numbers = dfs[layers[0]]['run_number'].values[flags]
     flagged_ls_numbers = dfs[layers[0]]['ls_number'].values[flags]
     n_unique_runs = len(np.unique(dfs[layers[0]]['run_number'].values[flags]))
-    print(f'    Found {np.sum(flags.astype(int))} flagged lumisections in {n_unique_runs} runs.')
+    print(f'      Found {np.sum(flags.astype(int))} flagged lumisections in {n_unique_runs} runs.')
     
     # explicitly delete some variables for memory management
     del dfs
@@ -300,9 +357,7 @@ def evaluate(config):
         for layer in layers: loss_mask_preprocessors[layer] = PreProcessor(f'PXLayer_{layer}')
 
     # initialize result
-    flagged_run_numbers = []
-    flagged_ls_numbers = []
-    batch_filter_results = []
+    batch_outputs = []
     
     # loop over eras
     for era in eras:
@@ -319,7 +374,7 @@ def evaluate(config):
         # run over batches
         for batchidx, batch_paramset in enumerate(batch_params):
             print(f'  Now running on batch {batchidx+1} / {nbatches}...')
-            batch_results = run_evaluation_batch(batch_paramset, dataloaders[era], nmfs[era],
+            batch_output = run_evaluation_batch(batch_paramset, dataloaders[era], nmfs[era],
                                                  preprocessors = preprocessors[era],
                                                  min_entries_filter = min_entries_filter,
                                                  oms_info = oms_info[era],
@@ -335,33 +390,11 @@ def evaluate(config):
                                                  do_loss_masking = do_loss_masking,
                                                  loss_masks = None if loss_masks is None else loss_masks[era],
                                                  loss_mask_preprocessors = loss_mask_preprocessors)
-            if batch_results is not None:
-                batch_filter_results.append(batch_results['filter_results'])
-                if len(batch_results['flagged_run_numbers'])>0:
-                    flagged_run_numbers.append(batch_results['flagged_run_numbers'])
-                    flagged_ls_numbers.append(batch_results['flagged_ls_numbers'])
-                
-            # break after one era for testing
-            #break
+            batch_outputs.append(batch_output)
 
     # contatenate the result
-    filter_results = {}
-    if len(batch_filter_results)>0:
-        for key in batch_filter_results[0].keys():
-            filter_results[key] = sum([batch_filter_result[key] for batch_filter_result in batch_filter_results], [])
-    if len(flagged_run_numbers) > 0:
-        flagged_run_numbers = np.concatenate(flagged_run_numbers)
-        flagged_ls_numbers = np.concatenate(flagged_ls_numbers)
-    else:
-        flagged_run_numbers = np.array([])
-        flagged_ls_numbers = np.array([])
-        
-    # return the result
-    res = {
-        'flagged_run_numbers': flagged_run_numbers,
-        'flagged_ls_numbers': flagged_ls_numbers,
-        'filter_results': filter_results
-    }
+    res = concatenate_output(batch_outputs)
+    
     return res
         
         
