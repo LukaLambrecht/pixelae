@@ -21,7 +21,7 @@ if __name__=='__main__':
     cmds = []
     for config in args.config:
         cmd = 'python3 nmf_testing_pattern.py'
-        cmd += f' {config}'
+        cmd += f' -c {config}'
         cmds.append(cmd)
 
     # run commands

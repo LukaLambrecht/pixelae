@@ -10,6 +10,7 @@ import importlib
 import numpy as np
 import scipy as sp
 import pandas as pd
+import argparse
 
 # local modules
 thisdir = os.getcwd()
@@ -100,12 +101,19 @@ def concatenate_output(outputs):
     }
     return res
         
-def run_evaluation_batch(batch_paramset, dataloaders, nmfs, **kwargs):
+def run_evaluation_batch(batch_paramset, dataloaders, nmfs, target_run=None, **kwargs):
     # run evaluation on a single batch.
     
     # initializations
     start_time = time.time()
     
+    # read run numbers and skip this batch
+    # if the requested run is not present in this batch
+    layers = list(dataloaders.keys())
+    run_column = 'run_number'
+    runs = np.unique(dataloaders[layers[0]].read_batch(batch_paramset, columns=[run_column])[run_column].values)
+    if target_run is not None and target_run not in runs: return
+
     # load the batch
     # (i.e. read the dataframes for this batch from file)
     dfs = {}
@@ -113,20 +121,16 @@ def run_evaluation_batch(batch_paramset, dataloaders, nmfs, **kwargs):
     for layer in layers:
         dfs[layer] = dataloaders[layer].read_batch(batch_paramset)
         
-    # determine runs in this batch
-    # note: this is not strictly needed, but is used to split evaluation per run.
-    # note: alternatively, one could define and read the batches as individual runs,
-    #       but that is much slower.
+    # split evaluation per run
     # note: this makes most sense if the batches are defined as groups of runs rather than fixed-size batches,
     #       else runs might be split in half and be present in multiple batches;
     #       for the most part, it doesn't matter as lumisections are evaluated independently,
     #       but one exception is dynamic masking.
-    run_column = 'run_number'
-    runs = np.unique(dfs[layers[0]][run_column].values)
-    
-    # loop over runs
     run_outputs = []
     for run in runs:
+
+        if target_run is not None and run!=target_run: continue
+
         print(f'    Now running on run {run}...')
         this_dfs = {}
         for layer in layers:
@@ -163,7 +167,8 @@ def run_evaluation(dfs, nmfs,
                      loss_masks = None,
                      loss_mask_preprocessors = None,
                      do_dynamic_loss_masking = False,
-                     dynamic_loss_masking_window = None):
+                     dynamic_loss_masking_window = None,
+                     debug=False):
     
     # initializations
     layers = list(dfs.keys())
@@ -261,11 +266,18 @@ def run_evaluation(dfs, nmfs,
             this_loss_mask = np.expand_dims(this_loss_mask, 0)
             this_loss_mask = loss_mask_preprocessors[layer].preprocess_mes(this_loss_mask, None, None)
             # invert
+            # note: the provided loss masks are assumed to have the following values:
+            #       1 = bin is good, not masked-away, should be considered.
+            #       0 = bin is in permanent loss, masked-away, should be ignored.
+            #       but for the downstream process, we want the other way round,
+            #       where 0 means the bin is good and 1 means it should be ignored.
             this_loss_mask = 1 - this_loss_mask
             # store at this stage for later use
             preprocessed_loss_masks_per_layer[layer] = this_loss_mask
+            if debug: np.save(f'static_loss_{layer}.npy', this_loss_mask)
             # rescale
             this_loss_mask = rebinning.rebin_keep_clip(this_loss_mask, target_shape, 1, mode='cv2')
+            if debug: np.save(f'static_loss_rebinned_{layer}.npy', this_loss_mask)
             # add to total
             loss_mask += this_loss_mask
         loss_mask = np.repeat(loss_mask, len(losses_combined), axis=0)
@@ -278,27 +290,34 @@ def run_evaluation(dfs, nmfs,
                                  np.ones(dynamic_loss_masking_window))).astype(float)
         window /= np.sum(window)
         for layer in layers:
-            # re-calculate binary threshold on loss
-            # note: cannot use the thresholded loss calculated above since it is implicitly clustered,
-            #       while here we need bin-per-bin values.
-            # note: for the thresholding, an arbitrary choice has to be made
-            #       (since multiple thresholds with corresponding clustering patterns can be provided);
-            #       here we just pick the first element in the provided list.
-            threshold = pattern_thresholds[0]['loss_threshold']
-            loss_binary = (losses[layer] > threshold).astype(int)
+            # get the loss
+            loss_binary = losses_thresholded[layer]
             # exclude static loss mask for dynamic mask calculation
+            # note: need to invert back to the convention with 1 for good bins and 0 for bins to be ignored.
             this_static_loss_mask = 1 - preprocessed_loss_masks_per_layer[layer]
             loss_binary = np.multiply(loss_binary, np.repeat(this_static_loss_mask, len(loss_binary), axis=0))
+            # ignore very small regions (can occur after previous step)
+            loss_binary = patternfiltering.filter_any_pattern(loss_binary, [np.ones((1,4)), np.ones((4,1)), np.ones((2,2))])
             # calculate dynamic loss mask for this layer
             this_dynamic_loss_mask = sp.ndimage.convolve1d(loss_binary.astype(float), window, axis=0, mode='constant')
+            if debug: np.save(f'dynamic_loss_{layer}.npy', this_dynamic_loss_mask)
             this_dynamic_loss_mask = (this_dynamic_loss_mask >= 0.999).astype(int)
             # rescale and add to total
             this_dynamic_loss_mask = rebinning.rebin_keep_clip(this_dynamic_loss_mask, target_shape, 1, mode='cv2')
+            if debug: np.save(f'dynamic_loss_rebinned_{layer}.npy', this_dynamic_loss_mask)
             dynamic_loss_mask += this_dynamic_loss_mask
+
+    # store some extra intermediate output for debugging
+    if debug:
+        np.save('run_number.npy', dfs[layers[0]]['run_number'].values)
+        np.save('ls_number.npy', dfs[layers[0]]['ls_number'].values)
+        np.save('losses_combined.npy', losses_combined)
+        np.save('static_loss_combined', loss_mask)
+        np.save('dynamic_loss_combined', dynamic_loss_mask)
 
     # apply threshold on combined binary loss
     losses_combined = ((losses_combined >= 2) & (losses_combined > (loss_mask + dynamic_loss_mask))).astype(int)
-    
+
     # search for patterns in the combined loss
     print('      Searching for patterns in the loss map...')
     flags = patternfiltering.contains_any_pattern(losses_combined, flagging_patterns,
@@ -309,7 +328,8 @@ def run_evaluation(dfs, nmfs,
     flagged_ls_numbers = dfs[layers[0]]['ls_number'].values[flags]
     n_unique_runs = len(np.unique(dfs[layers[0]]['run_number'].values[flags]))
     print(f'      Found {np.sum(flags.astype(int))} flagged lumisections in {n_unique_runs} runs.')
-    
+    if debug: print(flagged_ls_numbers)
+ 
     # explicitly delete some variables for memory management
     del dfs
     del mes_preprocessed
@@ -324,7 +344,7 @@ def run_evaluation(dfs, nmfs,
     return res
 
 
-def evaluate(config):
+def evaluate(config, target_run=None, debug=False):
         
     # get eras and layers
     eras = config['eras']
@@ -438,7 +458,8 @@ def evaluate(config):
                                                  loss_masks = None if loss_masks is None else loss_masks[era],
                                                  loss_mask_preprocessors = loss_mask_preprocessors,
                                                  do_dynamic_loss_masking = do_dynamic_loss_masking,
-                                                 dynamic_loss_masking_window = dynamic_loss_masking_window)
+                                                 dynamic_loss_masking_window = dynamic_loss_masking_window,
+                                                 target_run=target_run, debug=debug)
             batch_outputs.append(batch_output)
 
     # contatenate the result
@@ -448,15 +469,25 @@ def evaluate(config):
         
         
 if __name__=='__main__':
-    
+
+    # read command line args
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--config', required=True) 
+    parser.add_argument('--run', default=None)
+    parser.add_argument('--debug', default=False, action='store_true')
+    args = parser.parse_args()
+
+    # parse arguments
+    target_run = None if args.run is None else int(args.run)
+
     # read job config
-    configfile = sys.argv[1]
+    configfile = args.config
     print(f'Reading job config "{configfile}"...')
     with open(configfile, 'r') as f:
         config = json.load(f)
         
     # do evaluation
-    output = evaluate(config)
+    output = evaluate(config, target_run=target_run, debug=args.debug)
     
     # parsing for json compatibility
     output['flagged_run_numbers'] = output['flagged_run_numbers'].tolist() 
