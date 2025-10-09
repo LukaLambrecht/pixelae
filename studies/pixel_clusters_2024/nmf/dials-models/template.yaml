@@ -20,6 +20,13 @@ Resources:
       InferenceOnConditions:
         StableBeams: True
         FillType: PROTONS
+        MinBField: 3.5
+        MinEnergy: 6500
+        Clock: LHC
+        Sequence: GLOBAL-RUN
+        L1KeyMatch: .*collisions.*
+        L1MenuMatch: .*_Collisions.*_.*
+        HLTConfigMatch: .*/physics/.*
         AllowedPrimaryDatasets:
           - ZeroBias
 
@@ -95,14 +102,15 @@ Resources:
                 - -1
 
       # input data
+      # update: disable BPix1, as it is too much degraded (since 2025F)
       InputSignature:
-        - Name: BPix1
-          MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_1
-          DataType: TYPE_INT32
-          Dims:
-            - -1
-            - 26
-            - 72
+        #- Name: BPix1
+        #  MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_1
+        #  DataType: TYPE_INT32
+        #  Dims:
+        #    - -1
+        #    - 26
+        #    - 72
         - Name: BPix2
           MonitoringElement: PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_2
           DataType: TYPE_INT32

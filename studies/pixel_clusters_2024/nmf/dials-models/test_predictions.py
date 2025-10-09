@@ -247,6 +247,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process run number, optional URL, and optional headers.")
     parser.add_argument("-p", "--port", type=str, help="Web server port.")
     parser.add_argument("-n", "--model-name", type=str, help="Model name.")
+    parser.add_argument("-d", "--data", type=str, help="Path to pkl file with input data.")
     args = parser.parse_args()
     
     if not args.port:
@@ -255,7 +256,7 @@ if __name__ == "__main__":
         quit("ERROR: The model name must be provided.")
 
     # load data
-    with open('test_data.pkl', 'rb') as f:
+    with open(args.data, 'rb') as f:
         data = pickle.load(f)
     firstkey = list(data.keys())[0]
     print('Loaded data with following shapes:')
@@ -271,7 +272,7 @@ if __name__ == "__main__":
 
     # take only a small part of the data for quicker testing
     select_slice = None
-    select_slice = slice(2000, 3000)
+    #select_slice = slice(2000, 3000)
     if select_slice is not None:
         data = {name: arr[select_slice, :, :] for name, arr in data.items()}
         run_numbers = run_numbers[select_slice]
