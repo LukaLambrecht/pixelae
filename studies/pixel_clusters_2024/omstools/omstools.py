@@ -160,7 +160,7 @@ def get_hlt_data(hlt_path, run_numbers, ls_numbers):
             oms_df.append({
                 'run_number': attrs['run_number'],
                 'lumisection_number': attrs['first_lumisection_number'],
-                'hlt_rate': attrs['rate'] if not isdummy else np.zeros(len(attrs['run_number']))
+                'hlt_rate': attrs['rate'] if not isdummy else 0
                 })
     oms_df = pd.DataFrame(oms_df)
 

@@ -6,7 +6,6 @@ import sys
 import json
 import time
 import joblib
-import importlib
 import numpy as np
 import scipy as sp
 import pandas as pd
@@ -26,6 +25,57 @@ from studies.pixel_clusters_2024.omstools.omstools import get_oms_data, get_hlt_
 from studies.pixel_clusters_2024.preprocessing.preprocessor import PreProcessor
 from studies.pixel_clusters_2024.preprocessing.preprocessor import make_default_preprocessor
 
+# optional: dials for on-the-fly data retrieval
+try:
+    from cmsdials import Dials
+    from cmsdials.auth.bearer import Credentials
+    from cmsdials.filters import LumisectionFilters
+    from cmsdials.filters import LumisectionHistogram2DFilters
+    from cmsdials.filters import RunFilters
+except:
+    msg = 'WARNING: there was an error importing cmsdials;'
+    msg += ' any downstream call to cmsdials will likely crash,'
+    msg += ' but this should not be an issue when not using dials.'
+    print(msg)
+
+
+def get_dials_creds(max_attempts=5):
+  ### helper function to get dials credentials
+
+  authenticated = False
+  auth_attempt_counter = 0
+  while (auth_attempt_counter<max_attempts and not authenticated):
+    auth_attempt_counter += 1
+    print('Retrieving cmsdials credentials from cache...')
+    try:
+      creds = Credentials.from_creds_file()
+      authenticated = True
+    except: continue
+  if not authenticated:
+    # try one more time to trigger the original error again
+    creds = Credentials.from_creds_file()
+  sys.stdout.flush()
+  sys.stderr.flush()
+  return creds
+
+def get_data_from_dials(dials, filters, max_attempts=5, max_pages=None):
+  ### helper function to get dials data
+  
+  # make a wrapped call to cmsdials api
+  data_retrieved = False
+  attempt_counter = 0
+  while (attempt_counter<max_attempts and not data_retrieved):
+    attempt_counter += 1
+    try:
+      data = dials.h2d.list_all(filters, max_pages=max_pages, enable_progress=False)
+      data_retrieved = True
+    except: continue
+  if not data_retrieved:
+    # try one more time to trigger the original error
+    data = dialsfunc(filters, max_pages=max_pages, enable_progress=False)
+  sys.stdout.flush()
+  sys.stderr.flush()
+  return data
 
 def make_dataloaders(input_file_dict):
     # make a dataloader for each (set of) input file(s).
@@ -33,14 +83,23 @@ def make_dataloaders(input_file_dict):
     dataloaders = {}
     for era, layers in input_file_dict.items():
         dataloaders[era] = {}
-        for layer, files in layers.items(): dataloaders[era][layer] = MEDataLoader(files, verbose=False)
+        for layer, files in layers.items():
+            # special case where files is actually a set of dials filters
+            # to retrieve data on the fly
+            if isinstance(files[0], dict): dataloaders[era][layer] = files[0]
+            # default case where files is a list of files
+            elif isinstance(files[0], str): dataloaders[era][layer] = MEDataLoader(files, verbose=False)
+            else: raise Exception('Type not recognized.')
     print('Initiated the following data loaders:')
     for era, layers in dataloaders.items():
         print(f'  - Era {era}:')
         for layer, dataloader in layers.items():
-            nfiles = len(dataloader.parquet_files)
-            nrows = sum(dataloader.nrows)
-            print(f'    - Layer {layer}: data loader with {nfiles} files and {nrows} rows.')
+            if isinstance(dataloader, MEDataLoader):
+                nfiles = len(dataloader.parquet_files)
+                nrows = sum(dataloader.nrows)
+                print(f'    - Layer {layer}: data loader with {nfiles} files and {nrows} rows.')
+            else:    
+                print(f'    - Layer {layer}: [None] (will retrieve data online).')
     return dataloaders
         
 def make_preprocessors(eras, layers, local_normalization=None, **kwargs):
@@ -107,12 +166,22 @@ def run_evaluation_batch(batch_paramset, dataloaders, nmfs, target_run=None, **k
     
     # initializations
     start_time = time.time()
-    
-    # read run numbers and skip this batch
-    # if the requested run is not present in this batch
+
+    # read run numbers
+    runs = None
     layers = list(dataloaders.keys())
     run_column = 'run_number'
-    runs = np.unique(dataloaders[layers[0]].read_batch(batch_paramset, columns=[run_column])[run_column].values)
+    if len(batch_paramset)==2: runs = batch_paramset[1]
+    elif isinstance(dataloaders[layers[0]], MEDataLoader):
+        runs = np.unique(dataloaders[layers[0]].read_batch(batch_paramset, columns=[run_column])[run_column].values)
+    else:
+        # the remaining case, where the batch is defined in terms of absolute indices,
+        # but the data is supposed to be retrieved on the fly, does not make sense.
+        msg = 'Requested to retrieve data from DIALS on the fly,'
+        msg += ' but the provided batch specification is incompatible with that.'
+        raise Exception(msg)
+ 
+    # skip this batch if the requested run is not present in this batch
     if target_run is not None and target_run not in runs: return
 
     # load the batch
@@ -120,7 +189,26 @@ def run_evaluation_batch(batch_paramset, dataloaders, nmfs, target_run=None, **k
     dfs = {}
     layers = list(dataloaders.keys())
     for layer in layers:
-        dfs[layer] = dataloaders[layer].read_batch(batch_paramset)
+        # default case where data are read from file
+        if isinstance(dataloaders[layer], MEDataLoader):
+            dfs[layer] = dataloaders[layer].read_batch(batch_paramset)
+        # special case: retrieve data from dials on the fly
+        else:
+            this_dfs = []
+            creds = get_dials_creds()
+            dials = Dials(creds, workspace='tracker')
+            for run in runs:
+                dialsfilters = LumisectionHistogram2DFilters(
+                  dataset = dataloaders[layer]["dataset"],
+                  me = dataloaders[layer]["me"],
+                  run_number = run
+                )
+                data = get_data_from_dials(dials, dialsfilters)
+                this_dfs.append( data.to_pandas() )
+            dfs[layer] = pd.concat(this_dfs, ignore_index=True)
+            if len(dfs[layer])==0:
+                msg = 'WARNING: empty dataframe returned...'
+                print(msg)
         
     # split evaluation per run
     # note: this makes most sense if the batches are defined as groups of runs rather than fixed-size batches,
@@ -469,9 +557,19 @@ def evaluate(config, target_run=None, debug=False):
         
         # prepare batch parameters
         # (common to all layers)
-        kwargs = {}
-        if batch_size == 'run': kwargs['target_size'] = target_batch_size
-        batch_params = dataloaders[era][layers[0]].prepare_sequential_batches(batch_size=batch_size, **kwargs)
+        batch_params = None
+        dataloader = dataloaders[era][layers[0]]
+        if isinstance(dataloader, MEDataLoader):
+            kwargs = {}
+            if batch_size == 'run': kwargs['target_size'] = target_batch_size
+            batch_params = dataloader.prepare_sequential_batches(batch_size=batch_size, **kwargs)
+        else:
+            creds = get_dials_creds()
+            dials = Dials(creds, workspace='tracker')
+            runfilters = RunFilters(dataset=dataloader["dataset"])
+            runs = dials.run.list_all(runfilters, enable_progress=False).results
+            runs = sorted([el.run_number for el in runs])
+            batch_params = [(0, [run]) for run in runs]
         nbatches = len(batch_params)
         print(f'Prepared {nbatches} batches of size {batch_size}.')
 
