@@ -22,6 +22,7 @@ import tools.patternfiltering as patternfiltering
 import tools.rebinning as rebinning
 import tools.clustering as clustering
 from automasking.tools.automaskreader import AutomaskReader
+from studies.pixel_clusters_2024.omstools.omstools import get_oms_data, get_hlt_data
 from studies.pixel_clusters_2024.preprocessing.preprocessor import PreProcessor
 from studies.pixel_clusters_2024.preprocessing.preprocessor import make_default_preprocessor
 
@@ -172,7 +173,35 @@ def run_evaluation(dfs, nmfs,
     
     # initializations
     layers = list(dfs.keys())
-    
+
+    # get OMS info if not provided
+    if oms_filters is not None and oms_info is None:
+        print('      Retrieving OMS info...')
+        attributes = [oms_filter[0] for oms_filter in oms_filters]
+        run_numbers = dfs[layers[0]]['run_number'].values
+        ls_numbers = dfs[layers[0]]['ls_number'].values
+        oms_info = get_oms_data(attributes, run_numbers, ls_numbers).to_dict()
+        oms_info = {key: np.array(list(val.values())) for key, val in oms_info.items()}
+    if hltrate_filters is not None and hltrate_info is None:
+        if len(hltrate_filters)>1: raise Exception('not yet implemented')
+        path = hltrate_filters[0][0]
+        run_numbers = dfs[layers[0]]['run_number'].values
+        ls_numbers = dfs[layers[0]]['ls_number'].values
+        hltrate_info = get_hlt_data(path, run_numbers, ls_numbers).to_dict()
+        hltrate_info = {key: np.array(list(val.values())) for key, val in hltrate_info.items()}
+        hltrate_info_formatted = {}
+        for run in np.unique(run_numbers):
+            mask = (run_numbers==run).astype(bool)
+            this_ls_nbs = ls_numbers[mask]
+            this_run_nbs = run_numbers[mask]
+            this_rate = hltrate_info['hlt_rate'][mask]
+            hltrate_info_formatted[str(run)] = {path: {
+              'rate': this_rate,
+              'run_number': this_run_nbs,
+              'first_lumisection_number': this_ls_nbs
+            }}
+        hltrate_info = hltrate_info_formatted
+
     # filtering
     ndf = len(dfs[layers[0]])
     mask, filter_results = dftools.filter_dfs(dfs,
@@ -377,16 +406,24 @@ def evaluate(config, target_run=None, debug=False):
         oms_filters = config['oms_filters']
         oms_info = {}
         for era in eras:
-            with open(config['oms_filter_files'][era], 'r') as f:
-                oms_info[era] = json.load(f)
+            oms_info_file = config['oms_filter_files'][era]
+            if oms_info_file is None:
+                oms_info[era] = None # retrieve on the fly downstream
+            else:
+                with open(config['oms_filter_files'][era], 'r') as f:
+                    oms_info[era] = json.load(f)
     hltrate_info = None
     hltrate_filters = None
     if 'hltrate_filters' in config.keys():
         hltrate_filters = config['hltrate_filters']
         hltrate_info = {}
         for era in eras:
-            with open(config['hltrate_filter_files'][era], 'r') as f:
-                hltrate_info[era] = json.load(f)
+            hltrate_info_file = config['hltrate_filter_files'][era]
+            if hltrate_info_file is None:
+                hltrate_info[era] = None # retrieve on the fly downstream
+            else:
+                with open(config['hltrate_filter_files'][era], 'r') as f:
+                    hltrate_info[era] = json.load(f)
 
     # make automask reader if needed
     automask_reader = None
