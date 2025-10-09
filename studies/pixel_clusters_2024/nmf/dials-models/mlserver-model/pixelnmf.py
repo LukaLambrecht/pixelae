@@ -252,7 +252,7 @@ class PixelNMF(object):
         
         # define minimum entries filter
         min_entries_filter = {
-            'BPix1': 0.5e6,
+            #'BPix1': 0.5e6,
             'BPix2': 0.5e6/2,
             'BPix3': 0.5e6/3,
             'BPix4': 0.5e6/4
