@@ -18,6 +18,8 @@ Resources:
 
       # set conditions for running inference
       InferenceOnConditions:
+        MinRunNumber: 396598 # only start at 2025F
+        MaxRunNumber: 999999
         StableBeams: True
         FillType: PROTONS
         MinBField: 3.5
@@ -40,7 +42,7 @@ Resources:
               DataType: TYPE_INT32
               Dims:
                 - -1
-            - Name: ls_number
+            - Name: lumisection_number
               DataType: TYPE_INT32
               Dims:
                 - -1
@@ -145,9 +147,13 @@ Resources:
       Handler: app.Handler
       ModelUri: mlserver-model/pixelnmf.joblib
       Resources:
+        # updated recommendation: do not set requests or limits for resources,
+        # except in special cases; the default case is now handled automatically.
         Requests:
-          cpu: "0.1m"
-          memory: "250m"
+          cpu: null
+          gpu: null
+          memory: null
         Limits:
-          cpu: "1"
-          memory: "10Gi"
+          cpu: null
+          gpu: null
+          memory: null
