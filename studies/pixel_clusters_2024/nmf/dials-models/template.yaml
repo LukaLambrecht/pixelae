@@ -34,7 +34,7 @@ Resources:
 
       # extra input data from OMS
       InputMetadata:
-        - Name: general
+        - Name: oms_lumisection_info
           Source: OMS
           Endpoint: lumisections
           Attributes:
@@ -46,30 +46,10 @@ Resources:
               DataType: TYPE_INT32
               Dims:
                 - -1
-        - Name: pileup
-          Source: OMS
-          Endpoint: lumisections
-          Attributes:
             - Name: pileup
               DataType: TYPE_FP32
               Dims:
                 - -1
-        - Name: hlt_zerobias
-          Source: OMS
-          Endpoint: hltpathrates
-          Filter:
-            - Name: path_name
-              Value: HLT_ZeroBias_v\d+
-              Operation: LIST_AND_MATCH
-          Attributes:
-            - Name: hlt_zerobias_rate
-              DataType: TYPE_FP32
-              Dims:
-                - -1
-        - Name: dcs_bits
-          Source: OMS
-          Endpoint: lumisections
-          Attributes:
             - Name: cms_active
               DataType: TYPE_BOOL
               Dims:
@@ -100,6 +80,18 @@ Resources:
                 - -1
             - Name: tecm_ready
               DataType: TYPE_BOOL
+              Dims:
+                - -1
+        - Name: hlt_zerobias
+          Source: OMS
+          Endpoint: hltpathrates
+          Filter:
+            - Name: path_name
+              Value: HLT_ZeroBias_v\d+
+              Operation: LIST_AND_MATCH
+          Attributes:
+            - Name: hlt_zerobias_rate
+              DataType: TYPE_FP32
               Dims:
                 - -1
 
