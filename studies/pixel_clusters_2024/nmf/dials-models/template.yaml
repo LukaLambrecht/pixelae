@@ -90,7 +90,7 @@ Resources:
               Value: HLT_ZeroBias_v\d+
               Operation: LIST_AND_MATCH
           Attributes:
-            - Name: hlt_zerobias_rate
+            - Name: rate
               DataType: TYPE_FP32
               Dims:
                 - -1

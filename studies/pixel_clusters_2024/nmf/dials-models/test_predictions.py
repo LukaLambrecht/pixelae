@@ -213,19 +213,17 @@ def inference_over_http(data: dict, model_name: str, port=None, oms_data=None):
         for name, arr in oms_data.items():
             # default case for DCS bits
             this_input = {}
-            this_input['name'] = 'dcs_bits__'+name
+            this_input['name'] = 'oms_lumisection_info__'+name
             this_input['shape'] = arr.shape
             this_input['datatype'] = "BOOL"
             this_input['data'] = arr.flatten().tolist()
             # special cases
             if name=='run_number' or name=='lumisection_number':
-                this_input['name'] = 'general__'+name
                 this_input['datatype'] = 'INT32'
             if name=='pileup':
-                this_input['name'] = 'pileup__'+name
                 this_input['datatype'] = "FP32"
             if name=='hlt_rate':
-                this_input['name'] = 'hlt_zerobias__hlt_zerobias_rate'
+                this_input['name'] = 'hlt_zerobias__rate'
                 this_input['datatype'] = "FP32"
             # add to list
             inputs.append(this_input)

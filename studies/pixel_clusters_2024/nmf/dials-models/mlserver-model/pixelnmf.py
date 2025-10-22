@@ -321,7 +321,11 @@ class PixelNMF(object):
         X_input = {key: val for key, val in X.items() if key in menames}
         oms_input = {key: val for key, val in X.items() if key not in menames}
         # format the names of the meta-data fields
-        oms_input = {key.split('__')[1]: val for key, val in oms_input.items()}
+        oms_input_formatted = {}
+        for key, val in oms_input.items():
+            if key=='hlt_zerobias__rate': oms_input_formatted['hlt_zerobias_rate'] = val
+            else: oms_input_formatted[key.split('__')[1]] = val
+        oms_input = oms_input_formatted
         # printouts for testing and debugging
         print('Found following OMS keys for filtering:')
         print(oms_input.keys())
