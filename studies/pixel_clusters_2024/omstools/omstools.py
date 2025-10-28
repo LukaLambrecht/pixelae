@@ -42,16 +42,36 @@ def issue_oms_api_token() -> dict:
 
 def oms_query(endpoint: str, token_type: str, access_token: str, **kwargs):
     '''Make an OMS query'''
+    max_attempts = 5
+    data_retrieved = False
+    attempt_counter = 0
     headers = {"Authorization": f"{token_type} {access_token}", "Content-type": "application/json"}
-    response = requests.get(
-        f"{OMS_API_URL}/{endpoint}",
-        headers=headers,
-        timeout=30,
-        verify=False,
-        **kwargs,
-    )
+    
+    while (attempt_counter<max_attempts and not data_retrieved):
+        attempt_counter += 1
+        try:
+            response = requests.get(
+              f"{OMS_API_URL}/{endpoint}",
+              headers=headers,
+              timeout=120,
+              verify=False,
+              **kwargs,
+            )
+            response.raise_for_status()
+            data_retrieved = True
+        except: continue
+    
+    if not data_retrieved:
+        # try one more time to trigger the original error
+        response = requests.get(
+              f"{OMS_API_URL}/{endpoint}",
+              headers=headers,
+              timeout=120,
+              verify=False,
+              **kwargs,
+        )
+        response.raise_for_status()
 
-    response.raise_for_status()
     return response.json()
 
 def get_oms_data(attributes, run_numbers, ls_numbers):
@@ -128,7 +148,7 @@ def get_hlt_data(hlt_path, run_numbers, ls_numbers):
             path = entry['attributes']['path_name']
             if fnmatch(path, hlt_path): matching_hlt_paths.append(path)
 
-        # safety in case on matching trigger found:
+        # safety in case no matching trigger found:
         # use a dummy path name (needed to preserve the syntax of the output),
         # but set it to 0 afterwards.
         if len(matching_hlt_paths)!=1:
@@ -169,7 +189,8 @@ def get_hlt_data(hlt_path, run_numbers, ls_numbers):
       'run_number': run_numbers,
       'lumisection_number': ls_numbers
     })
-    filtered_df = filter_df.merge(oms_df, on=['run_number', 'lumisection_number'])
-
+    filtered_df = pd.merge(filter_df, oms_df, on=['run_number', 'lumisection_number'], how='left')
+    filtered_df.fillna(0, inplace=True)
+    
     # return result
     return filtered_df

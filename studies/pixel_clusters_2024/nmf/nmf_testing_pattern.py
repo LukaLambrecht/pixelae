@@ -40,42 +40,42 @@ except:
 
 
 def get_dials_creds(max_attempts=5):
-  ### helper function to get dials credentials
+    ### helper function to get dials credentials
 
-  authenticated = False
-  auth_attempt_counter = 0
-  while (auth_attempt_counter<max_attempts and not authenticated):
-    auth_attempt_counter += 1
-    print('Retrieving cmsdials credentials from cache...')
-    try:
-      creds = Credentials.from_creds_file()
-      authenticated = True
-    except: continue
-  if not authenticated:
-    # try one more time to trigger the original error again
-    creds = Credentials.from_creds_file()
-  sys.stdout.flush()
-  sys.stderr.flush()
-  return creds
+    authenticated = False
+    auth_attempt_counter = 0
+    while (auth_attempt_counter<max_attempts and not authenticated):
+        auth_attempt_counter += 1
+        print('Retrieving cmsdials credentials from cache...')
+        try:
+            creds = Credentials.from_creds_file()
+            authenticated = True
+        except: continue
+    if not authenticated:
+        # try one more time to trigger the original error again
+        creds = Credentials.from_creds_file()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    return creds
 
 def get_data_from_dials(dials, filters, max_attempts=5, max_pages=None):
-  ### helper function to get dials data
+    ### helper function to get dials data
   
-  # make a wrapped call to cmsdials api
-  data_retrieved = False
-  attempt_counter = 0
-  while (attempt_counter<max_attempts and not data_retrieved):
-    attempt_counter += 1
-    try:
-      data = dials.h2d.list_all(filters, max_pages=max_pages, enable_progress=False)
-      data_retrieved = True
-    except: continue
-  if not data_retrieved:
-    # try one more time to trigger the original error
-    data = dialsfunc(filters, max_pages=max_pages, enable_progress=False)
-  sys.stdout.flush()
-  sys.stderr.flush()
-  return data
+    # make a wrapped call to cmsdials api
+    data_retrieved = False
+    attempt_counter = 0
+    while (attempt_counter<max_attempts and not data_retrieved):
+        attempt_counter += 1
+        try:
+            data = dials.h2d.list_all(filters, max_pages=max_pages, enable_progress=False)
+            data_retrieved = True
+        except: continue
+    if not data_retrieved:
+        # try one more time to trigger the original error
+        data = dialsfunc(filters, max_pages=max_pages, enable_progress=False)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    return data
 
 def make_dataloaders(input_file_dict):
     # make a dataloader for each (set of) input file(s).
