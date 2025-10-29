@@ -24,6 +24,7 @@ from automasking.tools.automaskreader import AutomaskReader
 from studies.pixel_clusters_2024.omstools.omstools import get_oms_data, get_hlt_data
 from studies.pixel_clusters_2024.preprocessing.preprocessor import PreProcessor
 from studies.pixel_clusters_2024.preprocessing.preprocessor import make_default_preprocessor
+from studies.pixel_clusters_2024.nmf.concatenate_outputs import concatenate_output
 
 # optional: dials for on-the-fly data retrieval
 try:
@@ -126,40 +127,6 @@ def load_nmfs(nmf_file_dict):
         nmfs[era] = {}
         for layer, modelfile in layers.items(): nmfs[era][layer] = joblib.load(modelfile)
     return nmfs
-
-def concatenate_output(outputs):
-    # concatenate the outputs of run_evaluation
-    
-    # make lists
-    batch_filter_results = []
-    batch_flagged_run_numbers = []
-    batch_flagged_ls_numbers = []
-    for output in outputs:
-        if output is None: continue
-        batch_filter_results.append(output['filter_results'])
-        if len(output['flagged_run_numbers'])>0:
-            batch_flagged_run_numbers.append(output['flagged_run_numbers'])
-            batch_flagged_ls_numbers.append(output['flagged_ls_numbers'])
-
-    # contatenate the lists
-    filter_results = {}
-    if len(batch_filter_results)>0:
-        for key in batch_filter_results[0].keys():
-            filter_results[key] = sum([batch_filter_result[key] for batch_filter_result in batch_filter_results], [])
-    if len(batch_flagged_run_numbers) > 0:
-        flagged_run_numbers = np.concatenate(batch_flagged_run_numbers)
-        flagged_ls_numbers = np.concatenate(batch_flagged_ls_numbers)
-    else:
-        flagged_run_numbers = np.array([])
-        flagged_ls_numbers = np.array([])
-    
-    # make final result
-    res = {
-        'flagged_run_numbers': flagged_run_numbers,
-        'flagged_ls_numbers': flagged_ls_numbers,
-        'filter_results': filter_results
-    }
-    return res
         
 def run_evaluation_batch(batch_paramset, dataloaders, nmfs, target_run=None, **kwargs):
     # run evaluation on a single batch.
@@ -563,13 +530,27 @@ def evaluate(config, target_run=None, debug=False):
             kwargs = {}
             if batch_size == 'run': kwargs['target_size'] = target_batch_size
             batch_params = dataloader.prepare_sequential_batches(batch_size=batch_size, **kwargs)
+            print('Found following batch parameters (with file-based input):')
+            print(batch_params)
         else:
+            # read available runs for the provided dataset from DIALS
             creds = get_dials_creds()
             dials = Dials(creds, workspace='tracker')
             runfilters = RunFilters(dataset=dataloader["dataset"])
             runs = dials.run.list_all(runfilters, enable_progress=False).results
             runs = sorted([el.run_number for el in runs])
+            print('Found following runs (with dials-based input):')
+            print(runs)
+            # select runs based on partitioning
+            if 'part' in dataloader.keys() and 'nparts' in dataloader.keys():
+                part = dataloader['part']
+                nparts = dataloader['nparts']
+                runs = list(np.array_split(np.array(runs), nparts)[part])
+                print(f'Limiting runs to following partition (part {part}):')
+                print(runs)
             batch_params = [(0, [run]) for run in runs]
+            print('Found following batch parameters (with dials-based input):')
+            print(batch_params)
         nbatches = len(batch_params)
         print(f'Prepared {nbatches} batches of size {batch_size}.')
 
