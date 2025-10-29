@@ -154,7 +154,9 @@ def get_hlt_data(hlt_path, run_numbers, ls_numbers):
         if len(matching_hlt_paths)!=1:
             msg = f'WARNING: found no matching trigger paths for pattern "{hlt_path}"'
             print(msg)
-            this_hlt_path = oms_response['data'][0]['attributes']['path_name']
+            print(oms_response['data'])
+            if len(oms_response['data']) > 0: this_hlt_path = oms_response['data'][0]['attributes']['path_name']
+            else: this_hlt_path = 'dummy'
             isdummy = True
         else:
             this_hlt_path = matching_hlt_paths[0]
@@ -183,6 +185,15 @@ def get_hlt_data(hlt_path, run_numbers, ls_numbers):
                 'hlt_rate': attrs['rate'] if not isdummy else 0
                 })
     oms_df = pd.DataFrame(oms_df)
+    
+    # extra safety in case of empty dataframe
+    # (can happen if no triggers are found)
+    if len(oms_df.columns)==0:
+        oms_df = pd.DataFrame({
+            'run_number': run_numbers,
+            'lumisection_number': ls_numbers,
+            'hlt_rate': np.zeros(len(run_numbers))
+        })
 
     # filter on provided run and lumisection numbers
     filter_df = pd.DataFrame({
