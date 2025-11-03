@@ -30,6 +30,7 @@ Resources:
         L1MenuMatch: .*_Collisions.*_.*
         HLTConfigMatch: .*/physics/.*
         AllowedPrimaryDatasets:
+          - StreamExpress
           - ZeroBias
 
       # extra input data from OMS
