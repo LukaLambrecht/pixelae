@@ -1,0 +1,371 @@
+{
+  "eras": [
+    "2025F-v1"
+  ],
+  "layers": [
+    "BPix1",
+    "BPix2",
+    "BPix3",
+    "BPix4"
+  ],
+  "input_files": {
+    "2025F-v1": {
+      "BPix1": [
+        {
+          "dataset": "/ZeroBias/Run2025F-PromptReco-v1/DQMIO",
+          "me": "PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_1",
+          "part": 0,
+          "nparts": 10
+        }
+      ],
+      "BPix2": [
+        {
+          "dataset": "/ZeroBias/Run2025F-PromptReco-v1/DQMIO",
+          "me": "PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_2",
+          "part": 0,
+          "nparts": 10
+        }
+      ],
+      "BPix3": [
+        {
+          "dataset": "/ZeroBias/Run2025F-PromptReco-v1/DQMIO",
+          "me": "PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_3",
+          "part": 0,
+          "nparts": 10
+        }
+      ],
+      "BPix4": [
+        {
+          "dataset": "/ZeroBias/Run2025F-PromptReco-v1/DQMIO",
+          "me": "PixelPhase1/Phase1_MechanicalView/PXBarrel/clusters_per_SignedModuleCoord_per_SignedLadderCoord_PXLayer_4",
+          "part": 0,
+          "nparts": 10
+        }
+      ]
+    }
+  },
+  "nmf_files": {
+    "2025F-v1": {
+      "BPix1": "output_20250714_consolidation/models/nmf_model_BPIX1_C-v1.pkl",
+      "BPix2": "output_20250714_consolidation/models/nmf_model_BPIX2_C-v1.pkl",
+      "BPix3": "output_20250714_consolidation/models/nmf_model_BPIX3_C-v1.pkl",
+      "BPix4": "output_20250714_consolidation/models/nmf_model_BPIX4_C-v1.pkl"
+    }
+  },
+  "preprocessing_global_normalization": "avg",
+  "preprocessing_local_normalization": {
+    "2025F-v1": "avg_era_2025B-v1",
+    "2025F-v2": "avg_era_2025B-v1",
+    "2025G-v1": "avg_era_2025B-v1"
+  },
+  "min_entries_filter": {
+    "BPix1": 500000.0,
+    "BPix2": 250000.0,
+    "BPix3": 166666.66666666666,
+    "BPix4": 125000.0
+  },
+  "oms_filter_files": {
+    "2025F-v1": null
+  },
+  "oms_filters": [
+    [
+      "beams_stable"
+    ],
+    [
+      "cms_active"
+    ],
+    [
+      "bpix_ready"
+    ],
+    [
+      "fpix_ready"
+    ],
+    [
+      "tibtid_ready"
+    ],
+    [
+      "tob_ready"
+    ],
+    [
+      "tecp_ready"
+    ],
+    [
+      "tecm_ready"
+    ],
+    [
+      "pileup",
+      ">",
+      25
+    ]
+  ],
+  "hltrate_filter_files": {
+    "2025F-v1": null
+  },
+  "hltrate_filters": [
+    [
+      "HLT_ZeroBias_v*",
+      ">",
+      5
+    ]
+  ],
+  "do_automasking": false,
+  "automask_data_file": null,
+  "do_loss_masking": true,
+  "loss_masking_zero_frac_threshold": 0.9,
+  "loss_masking_zero_frac_files": {
+    "2025F-v1": {
+      "BPix1": "/eos/user/l/llambrec/pixelae/studies/pixel_clusters_2024/preprocessing/normdata/zerofrac_Run2025B-v1_PXLayer_1.npy",
+      "BPix2": "/eos/user/l/llambrec/pixelae/studies/pixel_clusters_2024/preprocessing/normdata/zerofrac_Run2025B-v1_PXLayer_2.npy",
+      "BPix3": "/eos/user/l/llambrec/pixelae/studies/pixel_clusters_2024/preprocessing/normdata/zerofrac_Run2025B-v1_PXLayer_3.npy",
+      "BPix4": "/eos/user/l/llambrec/pixelae/studies/pixel_clusters_2024/preprocessing/normdata/zerofrac_Run2025B-v1_PXLayer_4.npy"
+    }
+  },
+  "do_dynamic_loss_masking": false,
+  "dynamic_loss_masking_window": 100,
+  "batch_size": "run",
+  "target_batch_size": 3000,
+  "flagging_patterns": [
+    [
+      [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    ],
+    [
+      [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    ]
+  ],
+  "flagging_threshold": 0.001,
+  "pattern_thresholds": {
+    "BPix1": [
+      {
+        "loss_threshold": 0.04,
+        "pattern": [
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        ],
+        "filter_threshold": 1.5
+      }
+    ],
+    "BPix2": [
+      {
+        "loss_threshold": 0.04,
+        "pattern": [
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        ],
+        "filter_threshold": 1.5
+      }
+    ],
+    "BPix3": [
+      {
+        "loss_threshold": 0.04,
+        "pattern": [
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        ],
+        "filter_threshold": 1.5
+      }
+    ],
+    "BPix4": [
+      {
+        "loss_threshold": 0.04,
+        "pattern": [
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        ],
+        "filter_threshold": 1.5
+      }
+    ]
+  },
+  "outputfile": "/eos/user/l/llambrec/pixelae/studies/pixel_clusters_2024/nmf/output_tightbpix1/flagged_lumisections_2025F-v1_part0.json"
+}

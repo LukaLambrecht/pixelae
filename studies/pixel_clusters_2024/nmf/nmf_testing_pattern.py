@@ -47,7 +47,6 @@ def get_dials_creds(max_attempts=5):
     auth_attempt_counter = 0
     while (auth_attempt_counter<max_attempts and not authenticated):
         auth_attempt_counter += 1
-        print('Retrieving cmsdials credentials from cache...')
         try:
             creds = Credentials.from_creds_file()
             authenticated = True
@@ -326,7 +325,7 @@ def run_evaluation(dfs, nmfs,
     print('      Thresholding and clustering...')
     if pattern_thresholds is not None:
         for layer in layers:
-            losses_thresholded[layer] = clustering.cluster_loss_multithreshold(losses[layer], pattern_thresholds)
+            losses_thresholded[layer] = clustering.cluster_loss_multithreshold(losses[layer], pattern_thresholds[layer])
     else: raise Exception('Default behaviour for this case not yet implemented.')
 
     # overlay different layers
@@ -399,13 +398,36 @@ def run_evaluation(dfs, nmfs,
         np.save('static_loss_combined', loss_mask)
         np.save('dynamic_loss_combined', dynamic_loss_mask)
 
+    # default criterion: at least 2 layers.
     # apply threshold on combined binary loss
-    losses_combined = ((losses_combined >= 2) & (losses_combined > (loss_mask + dynamic_loss_mask))).astype(int)
-
+    losses_combined_binary = ((losses_combined >= 2) & (losses_combined > (loss_mask + dynamic_loss_mask))).astype(int)
     # search for patterns in the combined loss
     print('      Searching for patterns in the loss map...')
-    flags = patternfiltering.contains_any_pattern(losses_combined, flagging_patterns,
+    flags = patternfiltering.contains_any_pattern(losses_combined_binary, flagging_patterns,
               threshold = flagging_threshold)
+    
+    # alternative criterion: single layer (with larger size).
+    # note: hard-coded for now, maybe extend later.
+    # note: disabled, since it's probably better to only allow this for layer 2.
+    # apply threshold on combined binary loss
+    #losses_combined_binary_sl = ((losses_combined >= 1) & (losses_combined > (loss_mask + dynamic_loss_mask))).astype(int)
+    # search for patterns in the combined loss
+    #flagging_patterns_sl = [np.ones((2, 32))]
+    #flagging_threshold_sl = 1e-3
+    #flags_sl = patternfiltering.contains_any_pattern(losses_combined_binary_sl, flagging_patterns_sl,
+    #             threshold = flagging_threshold_sl)
+    
+    # alternative criterion: single layer, but only layer 2 (with larger size).
+    # note: hard-coded for now, maybe extend later.
+    #layer = 'BPix2'
+    #losses_binary_l2 = ((losses_thresholded[layer] == 1) & (preprocessed_loss_masks_per_layer[layer]==0))
+    #flagging_patterns_l2 = [np.ones((2, 32))]
+    #flagging_threshold_l2 = 1e-3
+    #flags_l2 = patternfiltering.contains_any_pattern(losses_binary_l2, flagging_patterns_l2,
+    #             threshold = flagging_threshold_l2)
+   
+    # combine criteria
+    #flags = ((flags) | (flags_l2))
     
     # store the flagged lumisections
     flagged_run_numbers = dfs[layers[0]]['run_number'].values[flags]
@@ -591,6 +613,7 @@ if __name__=='__main__':
     parser.add_argument('-c', '--config', required=True) 
     parser.add_argument('--run', default=None)
     parser.add_argument('--debug', default=False, action='store_true')
+    parser.add_argument('--no-output', default=False, action='store_true')
     args = parser.parse_args()
 
     # parse arguments
@@ -618,10 +641,11 @@ if __name__=='__main__':
     print(f'  - Number of flagged lumisections: {nflags}.')
 
     # write output file
-    outputfile = config['outputfile']
-    outputdir = os.path.dirname(outputfile)
-    if not os.path.exists(outputdir): os.makedirs(outputdir)
-    with open(outputfile, 'w') as f:
-        json.dump(output, f)
-    print(f'Output file "{outputfile}" written.')
-    print('Done.')
+    if not args.no_output:
+        outputfile = config['outputfile']
+        outputdir = os.path.dirname(outputfile)
+        if not os.path.exists(outputdir): os.makedirs(outputdir)
+        with open(outputfile, 'w') as f:
+            json.dump(output, f)
+        print(f'Output file "{outputfile}" written.')
+        print('Done.')

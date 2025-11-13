@@ -331,7 +331,8 @@ def plot_anomalous(histlist, ls, highlight=-1, hrange=-1):
 
 def plot_hist_2d(hist, fig=None, ax=None, figsize=None, title=None, titlesize=None,
                 xaxtitle=None, xaxtitlesize=None, yaxtitle=None, yaxtitlesize=None,
-                ticklabelsize=None, colorticklabelsize=None, extent=None, aspect=None, caxrange=None,
+                ticklabelsize=None, colorticklabelsize=None, extent=None, aspect=None,
+                caxrange=None, caxsoftmax=False,
                 docolorbar=True, caxtitle=None, caxtitlesize=None, caxtitleoffset=None,
                 origin='lower'):
     ### plot a 2D histogram
@@ -347,7 +348,8 @@ def plot_hist_2d(hist, fig=None, ax=None, figsize=None, title=None, titlesize=No
     # settings
     histmin = np.amin(hist)
     histmax = np.amax(hist)
-    hasnegative = histmin<-1e-6
+    histsoftmax = np.quantile(hist.astype(float), 0.99)
+    hasnegative = histmin < -1e-6
     aspect_ratio = hist.shape[0]/hist.shape[1]
     if aspect is None: aspect = 'equal'
     if extent is not None: aspect = 'auto'   
@@ -355,7 +357,8 @@ def plot_hist_2d(hist, fig=None, ax=None, figsize=None, title=None, titlesize=No
     # make color object
     if not hasnegative:
         vmin = 1e-6
-        vmax = max(vmin*2,histmax)
+        vmax = max(vmin*2, histmax)
+        if caxsoftmax: vmax = max(vmin*2, histsoftmax)
         norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax, clip=False)
     else: 
         extremum = max(abs(histmax),abs(histmin))
