@@ -58,6 +58,7 @@ def get_dials_creds(max_attempts=5):
     sys.stderr.flush()
     return creds
 
+
 def get_data_from_dials(dials, filters, max_attempts=5, max_pages=None):
     ### helper function to get dials data
   
@@ -77,19 +78,44 @@ def get_data_from_dials(dials, filters, max_attempts=5, max_pages=None):
     sys.stderr.flush()
     return data
 
-def make_dataloaders(input_file_dict):
-    # make a dataloader for each (set of) input file(s).
-    # input and output are both 2-layer dicts of the form era -> layer -> input file / dataloader.
+
+def make_dataloaders(input_file_dict, inplace=False):
+    '''
+    Make a dataloader for each (set of) input file(s).
+    Input arguments:
+    - input_file_dict: 2-layer dict of the form era -> layer -> input file specification,
+      where the input file specification is a list (but currently only length 1 is supported) of the following options:
+        - dict with key "file", specifying file on disk.
+        - dict with key "dataset" and "me", specifying filters for DIALS data retrieval on-the-fly.
+    - inplace: if set to True, the input_file_dict is modified so that each input file specification
+      gets an extra key-value pair of the form {"dataloader": DataLoader object};
+      else a new dict of the form era -> layer -> DataLoader object is returned.
+    '''
+    
+    # run over eras and layers
     dataloaders = {}
     for era, layers in input_file_dict.items():
         dataloaders[era] = {}
-        for layer, files in layers.items():
-            # special case where files is actually a set of dials filters
-            # to retrieve data on the fly
-            if isinstance(files[0], dict): dataloaders[era][layer] = files[0]
-            # default case where files is a list of files
-            elif isinstance(files[0], str): dataloaders[era][layer] = MEDataLoader(files, verbose=False)
-            else: raise Exception('Type not recognized.')
+        for layer, filespecs in layers.items():
+            
+            # filespecs is a list, but length different from 1 not yet implemented
+            # (currently length 1 suffices for all purposes)
+            if len(filespecs)!=1: raise Exception('Unrecognized length.')
+            filespec = filespecs[0]
+            
+            # special case where file spec is a dials filter, to retrieve data on the fly:
+            # simply put dataloader to None (and do not modify input structure)
+            if 'dataset' in filespec.keys() and 'me' in filespec.keys(): dataloaders[era][layer] = None
+                
+            # default case where file filter is a file:
+            # make dataloader (and add to input structure if requested)
+            elif 'file' in filespec.keys():
+                dataloader = MEDataLoader(filespec['file'], verbose=False)
+                dataloaders[era][layer] = dataloader
+                if inplace: filespec['dataloader'] = dataloader
+            else: raise Exception('Unrecognized input.')
+                
+    # printouts for checking
     print('Initiated the following data loaders:')
     for era, layers in dataloaders.items():
         print(f'  - Era {era}:')
@@ -100,8 +126,11 @@ def make_dataloaders(input_file_dict):
                 print(f'    - Layer {layer}: data loader with {nfiles} files and {nrows} rows.')
             else:    
                 print(f'    - Layer {layer}: [None] (will retrieve data online).')
+                
+    # return the dict of dataloaders
     return dataloaders
-        
+       
+    
 def make_preprocessors(eras, layers, local_normalization=None, **kwargs):
     # make a preprocessor for all eras and layers.
     # input are lists of eras and layers.
@@ -127,19 +156,27 @@ def load_nmfs(nmf_file_dict):
         for layer, modelfile in layers.items(): nmfs[era][layer] = joblib.load(modelfile)
     return nmfs
         
-def run_evaluation_batch(batch_paramset, dataloaders, nmfs, target_run=None, **kwargs):
+def run_evaluation_batch(batch_paramset, input_configs, nmfs, target_run=None, **kwargs):
     # run evaluation on a single batch.
     
     # initializations
     start_time = time.time()
-
+    layers = list(input_configs.keys())
+    first_layer = layers[0]
+    first_input_config = input_configs[first_layer][0]
+    
     # read run numbers
     runs = None
-    layers = list(dataloaders.keys())
     run_column = 'run_number'
-    if len(batch_paramset)==2: runs = batch_paramset[1]
-    elif isinstance(dataloaders[layers[0]], MEDataLoader):
-        runs = np.unique(dataloaders[layers[0]].read_batch(batch_paramset, columns=[run_column])[run_column].values)
+    if len(batch_paramset)==2:
+        # case where the run numbers are directly defined in the batch parameters
+        # (batch parameter set is of the form (file index, list of run numbers)).
+        runs = batch_paramset[1]
+    elif 'dataloader' in first_input_config.keys():
+        # case where the run numbers are not directly defined in the batch parameters
+        # and instead should be read from the input files
+        dataloader = first_input_config['dataloader']
+        runs = np.unique(dataloader.read_batch(batch_paramset, columns=[run_column])[run_column].values)
     else:
         # the remaining case, where the batch is defined in terms of absolute indices,
         # but the data is supposed to be retrieved on the fly, does not make sense.
@@ -153,20 +190,23 @@ def run_evaluation_batch(batch_paramset, dataloaders, nmfs, target_run=None, **k
     # load the batch
     # (i.e. read the dataframes for this batch from file)
     dfs = {}
-    layers = list(dataloaders.keys())
     for layer in layers:
+        input_config = input_configs[layer][0]
+        
         # default case where data are read from file
-        if isinstance(dataloaders[layer], MEDataLoader):
-            dfs[layer] = dataloaders[layer].read_batch(batch_paramset)
+        if 'dataloader' in input_config.keys():
+            dataloader = input_config['dataloader']
+            dfs[layer] = dataloader.read_batch(batch_paramset)
+            
         # special case: retrieve data from dials on the fly
-        else:
+        elif 'dataset' in input_config.keys() and 'me' in input_config.keys():
             this_dfs = []
             creds = get_dials_creds()
             dials = Dials(creds, workspace='tracker')
             for run in runs:
                 dialsfilters = LumisectionHistogram2DFilters(
-                  dataset = dataloaders[layer]["dataset"],
-                  me = dataloaders[layer]["me"],
+                  dataset = input_config["dataset"],
+                  me = input_config["me"],
                   run_number = run
                 )
                 data = get_data_from_dials(dials, dialsfilters)
@@ -457,7 +497,8 @@ def evaluate(config, target_run=None, debug=False):
     layers = config['layers']
         
     # make dataloaders, preprocessors and models
-    dataloaders = make_dataloaders(config['input_files'])
+    input_configs = config['input_files']
+    _ = make_dataloaders(input_configs, inplace=True)
     global_normalization = config.get('preprocessing_global_normalization', None)
     local_normalization = config.get('preprocessing_local_normalization', None)
     preprocessors = make_preprocessors(eras, layers,
@@ -547,39 +588,66 @@ def evaluate(config, target_run=None, debug=False):
         # prepare batch parameters
         # (common to all layers)
         batch_params = None
-        dataloader = dataloaders[era][layers[0]]
-        if isinstance(dataloader, MEDataLoader):
+        input_config = input_configs[era][layers[0]][0]
+        if 'dataloader' in input_config.keys():
+            # standard case of prebuilt dataloader
+            
+            # check dataloader object
+            dataloader = input_config['dataloader']
+            if not isinstance(dataloader, MEDataLoader):
+                raise Exception('Input config contains key "dataloader" but value is of unrecognized type {type(dataloader)}.')
+                
+            # make sequential batches
             kwargs = {}
             if batch_size == 'run': kwargs['target_size'] = target_batch_size
             batch_params = dataloader.prepare_sequential_batches(batch_size=batch_size, **kwargs)
+            print(f'Found {len(batch_params)} batches (with file-based input).')
+            
+            # select batches based on partitioning
+            if( 'part' in input_config.keys()
+                and 'nparts' in input_config.keys() ):
+                part = input_config['part']
+                nparts = input_config['nparts']
+                ids = np.arange(len(batch_params))
+                selected_ids = np.array_split(ids, nparts)[part]
+                batch_params = [batch_params[idx] for idx in selected_ids]
+                print(f'Limiting number of batches to {len(batch_params)} in partition.')
             print('Found following batch parameters (with file-based input):')
             print(batch_params)
-        else:
+        
+        elif 'dataset' in input_config.keys() and 'me' in input_config.keys():
+            # alternative case of retrieving data on the fly with DIALS
+            
             # read available runs for the provided dataset from DIALS
             creds = get_dials_creds()
             dials = Dials(creds, workspace='tracker')
-            runfilters = RunFilters(dataset=dataloader["dataset"])
+            runfilters = RunFilters(dataset=input_config["dataset"])
             runs = dials.run.list_all(runfilters, enable_progress=False).results
             runs = sorted([el.run_number for el in runs])
             print('Found following runs (with dials-based input):')
             print(runs)
+            
             # select runs based on partitioning
-            if 'part' in dataloader.keys() and 'nparts' in dataloader.keys():
-                part = dataloader['part']
-                nparts = dataloader['nparts']
+            if 'part' in input_config.keys() and 'nparts' in input_config.keys():
+                part = input_config['part']
+                nparts = input_config['nparts']
                 runs = list(np.array_split(np.array(runs), nparts)[part])
                 print(f'Limiting runs to following partition (part {part}):')
                 print(runs)
+            
             batch_params = [(0, [run]) for run in runs]
             print('Found following batch parameters (with dials-based input):')
             print(batch_params)
+            
+        else: raise Exception(f'Unrecognized input config with keys {input_config.keys()}')
+            
         nbatches = len(batch_params)
         print(f'Prepared {nbatches} batches of size {batch_size}.')
 
         # run over batches
         for batchidx, batch_paramset in enumerate(batch_params):
             print(f'  Now running on batch {batchidx+1} / {nbatches}...')
-            batch_output = run_evaluation_batch(batch_paramset, dataloaders[era], nmfs[era],
+            batch_output = run_evaluation_batch(batch_paramset, input_configs[era], nmfs[era],
                                                  preprocessors = preprocessors[era],
                                                  min_entries_filter = min_entries_filter,
                                                  oms_info = oms_info[era],

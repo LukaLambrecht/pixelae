@@ -23,7 +23,10 @@ def concatenate_output(outputs):
     filter_results = {}
     if len(batch_filter_results)>0:
         for key in batch_filter_results[0].keys():
-            filter_results[key] = sum([batch_filter_result[key] for batch_filter_result in batch_filter_results], [])
+            filter_results[key] = []
+            for batch_filter_result in batch_filter_results:
+                if key not in batch_filter_result.keys(): continue
+                filter_results[key] += batch_filter_result[key]
     if len(batch_flagged_run_numbers) > 0:
         flagged_run_numbers = np.concatenate(batch_flagged_run_numbers)
         flagged_ls_numbers = np.concatenate(batch_flagged_ls_numbers)
@@ -62,6 +65,7 @@ if __name__=='__main__':
     if go!='y': sys.exit()
 
     for key, values in merge.items():
+        print(f'Now merging {key}...')
         inputs = []
         for value in values:
             with open(value, 'r') as f:
