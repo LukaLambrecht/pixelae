@@ -19,10 +19,19 @@ def plot_cluster_occupancy(hist, fig=None, ax=None, fast=False,
                            xaxtitlesize=None, yaxtitlesize=None,
                            **kwargs):
     
+    # default arguments
+    default_kwargs = {
+        'extent': None,
+        'aspect': None,
+        'origin': 'lower'
+    }
+    default_kwargs.update(kwargs)
+    kwargs = default_kwargs
+   
     # make base plot
     fig, ax = plottools.plot_hist_2d(hist,
                 # fixed arguments
-                fig=fig, ax=ax, extent=None, aspect=None, origin='lower',
+                fig=fig, ax=ax,
                 # modifiable arguments
                 **kwargs)
     
@@ -91,8 +100,10 @@ def plot_cluster_occupancy(hist, fig=None, ax=None, fast=False,
     # subsample y-axis labels (else they are typically overlapping)
     stepdict = {6: 2, 14: 2, 22: 4, 32: 4, 17: 2}
     step = stepdict.get(nladders, 1)
-    yaxticks = yaxticks[0::step]
-    yaxticklabels = yaxticklabels[0::step]
+    ids = np.sort(np.concatenate((np.arange(0, int((len(yaxticks)+1)/2), step),
+                                  np.arange(len(yaxticks)-1, int(len(yaxticks)/2), -step))))
+    yaxticks = yaxticks[ids]
+    yaxticklabels = yaxticklabels[ids]
         
     # y-axis layout
     ax.set_ylabel(yaxtitle, fontsize=yaxtitlesize)

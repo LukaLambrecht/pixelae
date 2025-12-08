@@ -352,6 +352,7 @@ def plot_hist_2d(hist, fig=None, ax=None, figsize=None, title=None, titlesize=No
     hasnegative = histmin < -1e-6
     aspect_ratio = hist.shape[0]/hist.shape[1]
     if aspect is None: aspect = 'equal'
+    elif aspect=='auto': aspect_ratio = 1
     if extent is not None: aspect = 'auto'   
         
     # make color object
