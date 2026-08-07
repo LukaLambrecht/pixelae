@@ -5,6 +5,8 @@ import os
 import sys
 import json
 import time
+import random
+import shutil
 import joblib
 import numpy as np
 import scipy as sp
@@ -42,18 +44,43 @@ except:
 
 def get_dials_creds(max_attempts=5):
     ### helper function to get dials credentials
+    # note: cmsdials caches credentials to a json file with a non-atomic write
+    # (truncate then write), so when many processes (e.g. condor jobs) share
+    # the same working directory and hence the same default cache file,
+    # one process can catch another mid-write and see a corrupt/empty file.
+    # to avoid this, each process gets its own private cache directory,
+    # seeded from the shared one (read-only) on first use, so refreshes
+    # afterwards never collide with another process.
+
+    shared_cache_dir = '.cache'
+    local_cache_dir = f'.cache_pid{os.getpid()}'
+    shared_creds_file = os.path.join(shared_cache_dir, 'creds')
+    local_creds_file = os.path.join(local_cache_dir, 'creds')
+
+    if os.path.exists(shared_creds_file) and not os.path.exists(local_creds_file):
+        seed_attempt_counter = 0
+        seeded = False
+        while (seed_attempt_counter<max_attempts and not seeded):
+            seed_attempt_counter += 1
+            try:
+                with open(shared_creds_file, 'r') as f: json.load(f)
+                os.makedirs(local_cache_dir, exist_ok=True)
+                shutil.copy(shared_creds_file, local_creds_file)
+                seeded = True
+            except:
+                time.sleep(random.uniform(0.5, 2))
 
     authenticated = False
     auth_attempt_counter = 0
     while (auth_attempt_counter<max_attempts and not authenticated):
         auth_attempt_counter += 1
         try:
-            creds = Credentials.from_creds_file()
+            creds = Credentials.from_creds_file(cache_dir=local_cache_dir)
             authenticated = True
-        except: continue
+        except: time.sleep(random.uniform(0.5, 2))
     if not authenticated:
         # try one more time to trigger the original error again
-        creds = Credentials.from_creds_file()
+        creds = Credentials.from_creds_file(cache_dir=local_cache_dir)
     sys.stdout.flush()
     sys.stderr.flush()
     return creds
