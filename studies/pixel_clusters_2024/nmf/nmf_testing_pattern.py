@@ -314,6 +314,8 @@ def run_evaluation(dfs, nmfs,
         res = {
             'flagged_run_numbers': [],
             'flagged_ls_numbers': [],
+            'flagged_run_numbers_sl': [],
+            'flagged_ls_numbers_sl': [],
             'filter_results': filter_results
         }
         return res
@@ -446,36 +448,31 @@ def run_evaluation(dfs, nmfs,
     flags = patternfiltering.contains_any_pattern(losses_combined_binary, flagging_patterns,
               threshold = flagging_threshold)
     
-    # alternative criterion: single layer (with larger size).
-    # note: hard-coded for now, maybe extend later.
-    # note: disabled, since it's probably better to only allow this for layer 2.
-    # apply threshold on combined binary loss
-    #losses_combined_binary_sl = ((losses_combined >= 1) & (losses_combined > (loss_mask + dynamic_loss_mask))).astype(int)
-    # search for patterns in the combined loss
-    #flagging_patterns_sl = [np.ones((2, 32))]
-    #flagging_threshold_sl = 1e-3
-    #flags_sl = patternfiltering.contains_any_pattern(losses_combined_binary_sl, flagging_patterns_sl,
-    #             threshold = flagging_threshold_sl)
-    
-    # alternative criterion: single layer, but only layer 2 (with larger size).
-    # note: hard-coded for now, maybe extend later.
-    #layer = 'BPix2'
-    #losses_binary_l2 = ((losses_thresholded[layer] == 1) & (preprocessed_loss_masks_per_layer[layer]==0))
-    #flagging_patterns_l2 = [np.ones((2, 32))]
-    #flagging_threshold_l2 = 1e-3
-    #flags_l2 = patternfiltering.contains_any_pattern(losses_binary_l2, flagging_patterns_l2,
-    #             threshold = flagging_threshold_l2)
-   
-    # combine criteria
-    #flags = ((flags) | (flags_l2))
-    
+    # additional criterion: single layer instead of at least 2.
+    # reported separately from the multi-layer flags above, for information only
+    # (single-layer anomalies are not considered relevant for physics analyses).
+    # uses the same patterns and threshold as the multi-layer case.
+    losses_combined_binary_sl = ((losses_combined >= 1) & (losses_combined > (loss_mask + dynamic_loss_mask))).astype(int)
+    flags_sl = patternfiltering.contains_any_pattern(losses_combined_binary_sl, flagging_patterns,
+                 threshold = flagging_threshold)
+    # exclude lumisections already reported as multi-layer flags,
+    # so the two categories are disjoint.
+    flags_sl = ((flags_sl) & (~flags))
+
     # store the flagged lumisections
     flagged_run_numbers = dfs[layers[0]]['run_number'].values[flags]
     flagged_ls_numbers = dfs[layers[0]]['ls_number'].values[flags]
     n_unique_runs = len(np.unique(dfs[layers[0]]['run_number'].values[flags]))
     print(f'      Found {np.sum(flags.astype(int))} flagged lumisections in {n_unique_runs} runs.')
     if debug: print(flagged_ls_numbers)
- 
+
+    # store the single-layer flagged lumisections (informational only)
+    flagged_run_numbers_sl = dfs[layers[0]]['run_number'].values[flags_sl]
+    flagged_ls_numbers_sl = dfs[layers[0]]['ls_number'].values[flags_sl]
+    n_unique_runs_sl = len(np.unique(dfs[layers[0]]['run_number'].values[flags_sl]))
+    print(f'      Found {np.sum(flags_sl.astype(int))} single-layer flagged lumisections in {n_unique_runs_sl} runs.')
+    if debug: print(flagged_ls_numbers_sl)
+
     # explicitly delete some variables for memory management
     del dfs
     del mes_preprocessed
@@ -485,6 +482,8 @@ def run_evaluation(dfs, nmfs,
     res = {
         'flagged_run_numbers': flagged_run_numbers,
         'flagged_ls_numbers': flagged_ls_numbers,
+        'flagged_run_numbers_sl': flagged_run_numbers_sl,
+        'flagged_ls_numbers_sl': flagged_ls_numbers_sl,
         'filter_results': filter_results
     }
     return res
@@ -697,16 +696,20 @@ if __name__=='__main__':
     output = evaluate(config, target_run=target_run, debug=args.debug)
     
     # parsing for json compatibility
-    output['flagged_run_numbers'] = output['flagged_run_numbers'].tolist() 
+    output['flagged_run_numbers'] = output['flagged_run_numbers'].tolist()
     output['flagged_ls_numbers'] = output['flagged_ls_numbers'].tolist()
+    output['flagged_run_numbers_sl'] = output['flagged_run_numbers_sl'].tolist()
+    output['flagged_ls_numbers_sl'] = output['flagged_ls_numbers_sl'].tolist()
     for key, lslist in output['filter_results'].items():
         for idx, (run, lumi) in enumerate(lslist):
             lslist[idx] = (int(run), int(lumi))
-            
+
     # printouts for checking and debugging
     nflags = len(output['flagged_run_numbers'])
+    nflags_sl = len(output['flagged_run_numbers_sl'])
     print(f'Summarized results from running over config {configfile}:')
-    print(f'  - Number of flagged lumisections: {nflags}.')
+    print(f'  - Number of flagged lumisections (multi-layer): {nflags}.')
+    print(f'  - Number of flagged lumisections (single-layer, informational only): {nflags_sl}.')
 
     # write output file
     if not args.no_output:

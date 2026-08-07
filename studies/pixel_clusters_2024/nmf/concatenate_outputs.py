@@ -12,12 +12,19 @@ def concatenate_output(outputs):
     batch_filter_results = []
     batch_flagged_run_numbers = []
     batch_flagged_ls_numbers = []
+    batch_flagged_run_numbers_sl = []
+    batch_flagged_ls_numbers_sl = []
     for output in outputs:
         if output is None: continue
         batch_filter_results.append(output['filter_results'])
         if len(output['flagged_run_numbers'])>0:
             batch_flagged_run_numbers.append(output['flagged_run_numbers'])
             batch_flagged_ls_numbers.append(output['flagged_ls_numbers'])
+        # note: use .get() for backwards compatibility with older cached outputs
+        # that do not have the single-layer keys yet.
+        if len(output.get('flagged_run_numbers_sl', []))>0:
+            batch_flagged_run_numbers_sl.append(output['flagged_run_numbers_sl'])
+            batch_flagged_ls_numbers_sl.append(output['flagged_ls_numbers_sl'])
 
     # contatenate the lists
     filter_results = {}
@@ -33,11 +40,19 @@ def concatenate_output(outputs):
     else:
         flagged_run_numbers = np.array([])
         flagged_ls_numbers = np.array([])
-    
+    if len(batch_flagged_run_numbers_sl) > 0:
+        flagged_run_numbers_sl = np.concatenate(batch_flagged_run_numbers_sl)
+        flagged_ls_numbers_sl = np.concatenate(batch_flagged_ls_numbers_sl)
+    else:
+        flagged_run_numbers_sl = np.array([])
+        flagged_ls_numbers_sl = np.array([])
+
     # make final result
     res = {
         'flagged_run_numbers': flagged_run_numbers,
         'flagged_ls_numbers': flagged_ls_numbers,
+        'flagged_run_numbers_sl': flagged_run_numbers_sl,
+        'flagged_ls_numbers_sl': flagged_ls_numbers_sl,
         'filter_results': filter_results
     }
     return res
@@ -73,5 +88,7 @@ if __name__=='__main__':
         merged = concatenate_output(inputs)
         merged['flagged_run_numbers'] = [int(n) for n in merged['flagged_run_numbers']]
         merged['flagged_ls_numbers'] = [int(n) for n in merged['flagged_ls_numbers']]
+        merged['flagged_run_numbers_sl'] = [int(n) for n in merged['flagged_run_numbers_sl']]
+        merged['flagged_ls_numbers_sl'] = [int(n) for n in merged['flagged_ls_numbers_sl']]
         with open(key, 'w') as f:
             json.dump(merged, f)
