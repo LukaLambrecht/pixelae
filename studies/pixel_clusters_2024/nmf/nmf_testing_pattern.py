@@ -6,7 +6,6 @@ import sys
 import json
 import time
 import random
-import shutil
 import joblib
 import numpy as np
 import scipy as sp
@@ -42,45 +41,68 @@ except:
     print(msg)
 
 
+def _acquire_lock(lock_dir, timeout=180, stale_after=90):
+    ### mutual exclusion via mkdir, which is atomic even on network filesystems
+    # (unlike flock, which is unreliable over eos/nfs); a stale lock (left
+    # behind by a process that died while holding it) is broken after
+    # stale_after seconds so it cannot deadlock the whole batch.
+    start = time.time()
+    while True:
+        try:
+            os.mkdir(lock_dir)
+            return
+        except FileExistsError:
+            try:
+                if time.time() - os.stat(lock_dir).st_mtime > stale_after:
+                    os.rmdir(lock_dir)
+                    continue
+            except OSError:
+                pass
+            if time.time() - start > timeout:
+                raise TimeoutError(f'Timed out waiting for lock "{lock_dir}".')
+            time.sleep(random.uniform(0.5, 2))
+
+
+def _release_lock(lock_dir):
+    try: os.rmdir(lock_dir)
+    except OSError: pass
+
+
 def get_dials_creds(max_attempts=5):
     ### helper function to get dials credentials
     # note: cmsdials caches credentials to a json file with a non-atomic write
-    # (truncate then write), so when many processes (e.g. condor jobs) share
-    # the same working directory and hence the same default cache file,
-    # one process can catch another mid-write and see a corrupt/empty file.
-    # to avoid this, each process gets its own private cache directory,
-    # seeded from the shared one (read-only) on first use, so refreshes
-    # afterwards never collide with another process.
+    # (truncate then write). Beyond the corrupt-read risk this poses when
+    # many processes (e.g. condor jobs) share the same cache file, oauth
+    # refresh tokens are also single-use (they rotate on every refresh): if
+    # many processes each hold their own copy of the same refresh token and
+    # refresh independently (as an earlier version of this function did),
+    # only the first one succeeds and every other one gets an invalid_grant
+    # error, which cmsdials falls back to a full interactive device-auth
+    # flow for -- and with dozens of jobs doing that simultaneously, most
+    # of those fail too (timeout, or the auth server rejecting too many
+    # concurrent device flows). So instead of giving each process its own
+    # copy, all processes share one cache dir and take turns (via a lock)
+    # requesting credentials from it, so a refresh only ever happens once
+    # and everyone else reuses its result.
 
     shared_cache_dir = '.cache'
-    local_cache_dir = f'.cache_pid{os.getpid()}'
-    shared_creds_file = os.path.join(shared_cache_dir, 'creds')
-    local_creds_file = os.path.join(local_cache_dir, 'creds')
+    lock_dir = shared_cache_dir + '.lock'
 
-    if os.path.exists(shared_creds_file) and not os.path.exists(local_creds_file):
-        seed_attempt_counter = 0
-        seeded = False
-        while (seed_attempt_counter<max_attempts and not seeded):
-            seed_attempt_counter += 1
+    _acquire_lock(lock_dir)
+    try:
+        authenticated = False
+        auth_attempt_counter = 0
+        while (auth_attempt_counter<max_attempts and not authenticated):
+            auth_attempt_counter += 1
             try:
-                with open(shared_creds_file, 'r') as f: json.load(f)
-                os.makedirs(local_cache_dir, exist_ok=True)
-                shutil.copy(shared_creds_file, local_creds_file)
-                seeded = True
-            except:
-                time.sleep(random.uniform(0.5, 2))
-
-    authenticated = False
-    auth_attempt_counter = 0
-    while (auth_attempt_counter<max_attempts and not authenticated):
-        auth_attempt_counter += 1
-        try:
-            creds = Credentials.from_creds_file(cache_dir=local_cache_dir)
-            authenticated = True
-        except: time.sleep(random.uniform(0.5, 2))
-    if not authenticated:
-        # try one more time to trigger the original error again
-        creds = Credentials.from_creds_file(cache_dir=local_cache_dir)
+                creds = Credentials.from_creds_file(cache_dir=shared_cache_dir)
+                authenticated = True
+            except: time.sleep(random.uniform(0.5, 2))
+        if not authenticated:
+            # try one more time to trigger the original error again
+            creds = Credentials.from_creds_file(cache_dir=shared_cache_dir)
+    finally:
+        _release_lock(lock_dir)
     sys.stdout.flush()
     sys.stderr.flush()
     return creds
@@ -272,6 +294,52 @@ def run_evaluation_batch(batch_paramset, input_configs, nmfs, target_run=None, *
     # return the result
     return output
 
+def get_topology(flags, region, losses_rebinned_per_layer, layers, masks_for_layers=None):
+    '''
+    For each flagged instance, locate the spatially-connected regions ("blobs")
+    where each layer's own thresholded loss overlaps with the matched pattern
+    region, so that anomalies that only look related because they are adjacent
+    in time (but are really in different layers, or in different locations
+    within the same layer) can be told apart downstream.
+    Input arguments:
+    - flags: boolean array of shape (ninstances,); which instances are flagged.
+    - region: boolean array of shape (ninstances, height, width); the matched
+      pattern region per instance, as returned by patternfiltering.filter_any_pattern
+      (only meaningful where flags is True).
+    - losses_rebinned_per_layer: dict layer -> array of shape (ninstances, height, width),
+      the per-layer rebinned thresholded loss.
+    - layers: list of layer names to check.
+    - masks_for_layers: dict layer -> array of shape (1, height, width) with the
+      permanently masked (dead) region for that layer (1 = masked away), or None
+      if loss masking is not enabled (in which case no blob is ever marked masked).
+    Returns a list (one entry per flagged instance, same order as np.nonzero(flags)[0])
+    of lists of blobs, each blob a dict:
+      {"layer": <name>, "bbox": [row_min, row_max, col_min, col_max], "masked": <bool>}
+    bbox is in the shared combined/rebinned coordinate space (which equals the
+    first layer's native grid, since every other layer is rebinned to match it).
+    A blob is "masked" if all of its bins fall within that layer's permanently
+    masked (dead) region, i.e. it only exists because the dead region rides
+    along with a real anomaly elsewhere in the pattern, not because it is a
+    genuine anomaly itself (see contains_any_pattern's masking behaviour).
+    '''
+    topology = []
+    for idx in np.nonzero(flags)[0]:
+        this_region = region[idx].astype(bool)
+        blobs = []
+        for layer in layers:
+            overlap = losses_rebinned_per_layer[layer][idx].astype(bool) & this_region
+            if not np.any(overlap): continue
+            dead_mask = masks_for_layers[layer][0].astype(bool) if masks_for_layers is not None else None
+            labeled, nblobs = sp.ndimage.label(overlap)
+            for blob_id, sl in enumerate(sp.ndimage.find_objects(labeled), start=1):
+                if sl is None: continue
+                blob_mask = (labeled[sl] == blob_id)
+                masked = dead_mask is not None and not np.any(blob_mask & ~dead_mask[sl])
+                bbox = [sl[0].start, sl[0].stop - 1, sl[1].start, sl[1].stop - 1]
+                blobs.append({'layer': layer, 'bbox': bbox, 'masked': bool(masked)})
+        topology.append(blobs)
+    return topology
+
 def run_evaluation(dfs, nmfs,
                      preprocessors = None,
                      min_entries_filter = None,
@@ -341,8 +409,10 @@ def run_evaluation(dfs, nmfs,
         res = {
             'flagged_run_numbers': [],
             'flagged_ls_numbers': [],
+            'flagged_topology': [],
             'flagged_run_numbers_sl': [],
             'flagged_ls_numbers_sl': [],
+            'flagged_topology_sl': [],
             'filter_results': filter_results
         }
         return res
@@ -402,13 +472,15 @@ def run_evaluation(dfs, nmfs,
     print('      Combining layers...')
     target_shape = losses[layers[0]].shape[1:3]
     losses_combined = np.zeros(losses[layers[0]].shape)
+    losses_rebinned_per_layer = {}
     for layer in layers:
-        losses_rebinned = rebinning.rebin_keep_clip(losses_thresholded[layer], target_shape, 1, mode='cv2')
-        losses_combined += losses_rebinned
+        losses_rebinned_per_layer[layer] = rebinning.rebin_keep_clip(losses_thresholded[layer], target_shape, 1, mode='cv2')
+        losses_combined += losses_rebinned_per_layer[layer]
 
     # optional: do loss masking
     loss_mask = np.zeros(losses_combined.shape)
     preprocessed_loss_masks_per_layer = {}
+    preprocessed_loss_masks_per_layer_rebinned = {}
     if do_loss_masking:
         print('      Applying loss mask...')
         loss_mask = np.zeros((1, target_shape[0], target_shape[1]))
@@ -424,12 +496,14 @@ def run_evaluation(dfs, nmfs,
             #       but for the downstream process, we want the other way round,
             #       where 0 means the bin is good and 1 means it should be ignored.
             this_loss_mask = 1 - this_loss_mask
-            # store at this stage for later use
+            # store at this stage for later use (native per-layer resolution)
             preprocessed_loss_masks_per_layer[layer] = this_loss_mask
             if debug: np.save(f'static_loss_{layer}.npy', this_loss_mask)
             # rescale
             this_loss_mask = rebinning.rebin_keep_clip(this_loss_mask, target_shape, 1, mode='cv2')
             if debug: np.save(f'static_loss_rebinned_{layer}.npy', this_loss_mask)
+            # store the rebinned (combined-resolution) version too, for layer attribution downstream
+            preprocessed_loss_masks_per_layer_rebinned[layer] = this_loss_mask
             # add to total
             loss_mask += this_loss_mask
         loss_mask = np.repeat(loss_mask, len(losses_combined), axis=0)
@@ -471,20 +545,32 @@ def run_evaluation(dfs, nmfs,
     # apply threshold on combined binary loss
     losses_combined_binary = ((losses_combined >= 2) & (losses_combined > (loss_mask + dynamic_loss_mask))).astype(int)
     # search for patterns in the combined loss
+    # note: use filter_any_pattern (instead of contains_any_pattern) to get the
+    #       matched region itself, not just a per-instance boolean, so the
+    #       contributing layers can be determined below.
     print('      Searching for patterns in the loss map...')
-    flags = patternfiltering.contains_any_pattern(losses_combined_binary, flagging_patterns,
-              threshold = flagging_threshold)
-    
+    region = patternfiltering.filter_any_pattern(losses_combined_binary, flagging_patterns,
+               threshold = flagging_threshold)
+    flags = np.any(region, axis=(1,2))
+
     # additional criterion: single layer instead of at least 2.
     # reported separately from the multi-layer flags above, for information only
     # (single-layer anomalies are not considered relevant for physics analyses).
     # uses the same patterns and threshold as the multi-layer case.
     losses_combined_binary_sl = ((losses_combined >= 1) & (losses_combined > (loss_mask + dynamic_loss_mask))).astype(int)
-    flags_sl = patternfiltering.contains_any_pattern(losses_combined_binary_sl, flagging_patterns,
-                 threshold = flagging_threshold)
+    region_sl = patternfiltering.filter_any_pattern(losses_combined_binary_sl, flagging_patterns,
+                  threshold = flagging_threshold)
+    flags_sl = np.any(region_sl, axis=(1,2))
     # exclude lumisections already reported as multi-layer flags,
     # so the two categories are disjoint.
     flags_sl = ((flags_sl) & (~flags))
+
+    # determine the spatial topology (which layer(s), where, and whether via a
+    # masked dead region) of each flagged instance, so temporally-adjacent but
+    # spatially- or layer-distinct anomalies can be told apart downstream.
+    masks_for_layers = preprocessed_loss_masks_per_layer_rebinned if do_loss_masking else None
+    flagged_topology = get_topology(flags, region, losses_rebinned_per_layer, layers, masks_for_layers)
+    flagged_topology_sl = get_topology(flags_sl, region_sl, losses_rebinned_per_layer, layers, masks_for_layers)
 
     # store the flagged lumisections
     flagged_run_numbers = dfs[layers[0]]['run_number'].values[flags]
@@ -509,8 +595,10 @@ def run_evaluation(dfs, nmfs,
     res = {
         'flagged_run_numbers': flagged_run_numbers,
         'flagged_ls_numbers': flagged_ls_numbers,
+        'flagged_topology': flagged_topology,
         'flagged_run_numbers_sl': flagged_run_numbers_sl,
         'flagged_ls_numbers_sl': flagged_ls_numbers_sl,
+        'flagged_topology_sl': flagged_topology_sl,
         'filter_results': filter_results
     }
     return res

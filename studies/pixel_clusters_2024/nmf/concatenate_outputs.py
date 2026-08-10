@@ -12,19 +12,27 @@ def concatenate_output(outputs):
     batch_filter_results = []
     batch_flagged_run_numbers = []
     batch_flagged_ls_numbers = []
+    flagged_topology = []
     batch_flagged_run_numbers_sl = []
     batch_flagged_ls_numbers_sl = []
+    flagged_topology_sl = []
     for output in outputs:
         if output is None: continue
         batch_filter_results.append(output['filter_results'])
         if len(output['flagged_run_numbers'])>0:
             batch_flagged_run_numbers.append(output['flagged_run_numbers'])
             batch_flagged_ls_numbers.append(output['flagged_ls_numbers'])
+            # note: use .get() for backwards compatibility with older cached outputs
+            # that do not have the topology key yet.
+            n = len(output['flagged_run_numbers'])
+            flagged_topology += output.get('flagged_topology', [[]]*n)
         # note: use .get() for backwards compatibility with older cached outputs
         # that do not have the single-layer keys yet.
         if len(output.get('flagged_run_numbers_sl', []))>0:
             batch_flagged_run_numbers_sl.append(output['flagged_run_numbers_sl'])
             batch_flagged_ls_numbers_sl.append(output['flagged_ls_numbers_sl'])
+            n_sl = len(output['flagged_run_numbers_sl'])
+            flagged_topology_sl += output.get('flagged_topology_sl', [[]]*n_sl)
 
     # contatenate the lists
     filter_results = {}
@@ -51,8 +59,10 @@ def concatenate_output(outputs):
     res = {
         'flagged_run_numbers': flagged_run_numbers,
         'flagged_ls_numbers': flagged_ls_numbers,
+        'flagged_topology': flagged_topology,
         'flagged_run_numbers_sl': flagged_run_numbers_sl,
         'flagged_ls_numbers_sl': flagged_ls_numbers_sl,
+        'flagged_topology_sl': flagged_topology_sl,
         'filter_results': filter_results
     }
     return res
