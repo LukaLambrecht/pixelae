@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import six
 import numpy as np
@@ -73,11 +74,15 @@ if __name__=='__main__':
     inputdir = sys.argv[1]
 
     # find input files only differing by part
+    # note: part-splits are named with either a hyphen (e.g. "2024F-v1-part1",
+    # the older convention) or an underscore (e.g. "2025F-v1_part0", the
+    # newer, 0-indexed convention) before "part<N>" -- match both.
     merge = {}
     for f in os.listdir(inputdir):
         if not f.startswith('flagged_lumisections'): continue
-        if not '_part' in f: continue
-        merged = f.split('_part')[0] + '.json'
+        match = re.search(r'[-_]part\d+', f)
+        if not match: continue
+        merged = f[:match.start()] + '.json'
         merged = os.path.join(inputdir, merged)
         if merged in merge: merge[merged].append(os.path.join(inputdir, f))
         else: merge[merged] = [os.path.join(inputdir, f)]
