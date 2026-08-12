@@ -50,6 +50,18 @@ be checked directly in the printout too. --skip-single-layer skips
 reading and writing single-layer anomalies entirely (only multi-layer
 flags are read from the input files, reported, and written).
 
+Post-hoc masking
+------------------
+--mask (a JSON file path or inline JSON string of the form
+{"<layer>": [[row_min, row_max, col_min, col_max], ...], ...}) excludes any
+flagged instance's blob that overlaps a masked bbox for its layer from that
+instance's topology/layer attribution, as if it had been permanently masked
+at evaluation time; if that removes all of an instance's evidence, the
+(run, ls) is dropped from that category entirely. Useful for excluding
+already-understood, specific recurring defects (e.g. a known chronically
+noisy region) from the anomaly statistics without re-running the full
+evaluation. See load_mask()/load_pairs().
+
 Note: --threshold was only calibrated/validated against the DP note's
 multi-layer anomaly counts. Single-layer flags are much denser per run, so
 the same threshold tends to over-merge them into long combined anomalies --
@@ -79,7 +91,30 @@ import json
 import os
 
 
-def load_pairs(files, include_sl=True):
+def load_mask(spec):
+    """Loads a post-hoc mask from `spec`, which is either a path to a JSON
+    file or an inline JSON string, of the form
+      {"<layer>": [[row_min, row_max, col_min, col_max], ...], ...}
+    (same bbox convention -- inclusive bounds, combined/rebinned coordinate
+    space -- as the "bbox" field of flagged_topology/flagged_topology_sl
+    entries in the nmf_testing_pattern.py output). Returns None if spec is
+    None, else a dict layer -> list of bbox lists."""
+    if spec is None:
+        return None
+    if os.path.exists(spec):
+        with open(spec) as f:
+            raw = json.load(f)
+    else:
+        raw = json.loads(spec)
+    return raw
+
+
+def _is_masked_out(blob, mask):
+    """True if `blob`'s bbox overlaps any post-hoc masked bbox for its layer."""
+    return any(bbox_overlap(blob['bbox'], m) for m in mask.get(blob['layer'], []))
+
+
+def load_pairs(files, include_sl=True, mask=None):
     """Returns (ml, sl, ml_layers, sl_layers, ml_topology, sl_topology, has_ml_topology, has_sl_topology):
     - ml, sl: sets of (run, ls) pairs for multi-layer / single-layer flags.
     - ml_layers, sl_layers: dict (run, ls) -> set of genuinely (non-masked)
@@ -96,7 +131,15 @@ def load_pairs(files, include_sl=True):
       the plain LS-gap rule for files that predate this feature.
     If include_sl is False, the single-layer fields are not even read from
     the input files, and sl/sl_layers/sl_topology/has_sl_topology come back
-    empty/False."""
+    empty/False.
+    If `mask` is given (see load_mask()), any blob overlapping a masked
+    bbox for its layer is excluded from that instance's topology/layer
+    attribution, same as if the original evaluation had marked it
+    permanently masked; if that removes ALL of an instance's evidence
+    (it had some to begin with -- pre-topology files are left untouched,
+    since there's nothing to mask there), the (run, ls) pair itself is
+    dropped from ml/sl entirely, since it likely would not have been
+    flagged at all had the mask been applied at evaluation time."""
     ml, sl = set(), set()
     ml_layers, sl_layers = {}, {}
     ml_topology, sl_topology = {}, {}
@@ -105,19 +148,29 @@ def load_pairs(files, include_sl=True):
         with open(path) as f:
             d = json.load(f)
         ml_pairs = list(zip(d['flagged_run_numbers'], d['flagged_ls_numbers']))
-        ml |= set(ml_pairs)
         if 'flagged_topology' in d: has_ml_topology = True
         for pair, blobs in zip(ml_pairs, d.get('flagged_topology', [[]] * len(ml_pairs))):
             keep = [{'layer': b['layer'], 'bbox': b['bbox']} for b in blobs if not b['masked']]
+            if mask is not None:
+                keep_masked = [b for b in keep if not _is_masked_out(b, mask)]
+                if keep and not keep_masked:
+                    continue  # this instance's only evidence was masked away -- drop it
+                keep = keep_masked
+            ml.add(pair)
             ml_layers.setdefault(pair, set()).update(b['layer'] for b in keep)
             ml_topology.setdefault(pair, []).extend(keep)
         if not include_sl:
             continue
         sl_pairs = list(zip(d.get('flagged_run_numbers_sl', []), d.get('flagged_ls_numbers_sl', [])))
-        sl |= set(sl_pairs)
         if 'flagged_topology_sl' in d: has_sl_topology = True
         for pair, blobs in zip(sl_pairs, d.get('flagged_topology_sl', [[]] * len(sl_pairs))):
             keep = [{'layer': b['layer'], 'bbox': b['bbox']} for b in blobs if not b['masked']]
+            if mask is not None:
+                keep_masked = [b for b in keep if not _is_masked_out(b, mask)]
+                if keep and not keep_masked:
+                    continue  # this instance's only evidence was masked away -- drop it
+                keep = keep_masked
+            sl.add(pair)
             sl_layers.setdefault(pair, set()).update(b['layer'] for b in keep)
             sl_topology.setdefault(pair, []).extend(keep)
     return ml, sl, ml_layers, sl_layers, ml_topology, sl_topology, has_ml_topology, has_sl_topology
@@ -302,9 +355,17 @@ def main():
                               'output CSV.')
     parser.add_argument('-v', '--verbose', action='store_true',
                          help='Print the full contents of the output CSV to stdout just before writing it.')
+    parser.add_argument('--mask', default=None,
+                         help='Post-hoc mask: a JSON file path or an inline JSON string of the form '
+                              '{"<layer>": [[row_min, row_max, col_min, col_max], ...], ...} (same bbox '
+                              'convention as flagged_topology). Any flagged instance\'s blob overlapping a '
+                              'masked bbox for its layer is excluded from its topology/layer attribution, as '
+                              'if it had been permanently masked at evaluation time; if that removes all of an '
+                              'instance\'s evidence, the (run, ls) is dropped entirely from that category.')
     args = parser.parse_args()
     if args.threshold_sl is None:
         args.threshold_sl = args.threshold
+    mask = load_mask(args.mask)
     include_layers = set(args.include_layers) if args.include_layers is not None else None
     exclude_layers = set(args.exclude_layers)
 
@@ -329,7 +390,7 @@ def main():
         print('Per-file breakdown (each file summarized on its own, before taking the union across all inputs):')
         for path in args.inputs:
             (fml_pairs, fsl_pairs, fml_layers, fsl_layers,
-             fml_topology, fsl_topology, fhas_ml_topology, fhas_sl_topology) = load_pairs([path], include_sl=include_sl)
+             fml_topology, fsl_topology, fhas_ml_topology, fhas_sl_topology) = load_pairs([path], include_sl=include_sl, mask=mask)
             fml_anomalies = filter_by_layers(
                 compute_anomalies(fml_pairs, fml_topology, args.threshold, exclude, fhas_ml_topology, fml_layers),
                 include_layers, exclude_layers)
@@ -347,7 +408,7 @@ def main():
         print()
 
     (ml_pairs, sl_pairs, ml_layers, sl_layers,
-     ml_topology, sl_topology, has_ml_topology, has_sl_topology) = load_pairs(args.inputs, include_sl=include_sl)
+     ml_topology, sl_topology, has_ml_topology, has_sl_topology) = load_pairs(args.inputs, include_sl=include_sl, mask=mask)
 
     if not has_ml_topology:
         print('WARNING: no flagged_topology found in the input file(s) -- falling back to plain '

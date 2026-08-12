@@ -294,7 +294,7 @@ def run_evaluation_batch(batch_paramset, input_configs, nmfs, target_run=None, *
     # return the result
     return output
 
-def get_topology(flags, region, losses_rebinned_per_layer, layers, masks_for_layers=None):
+def get_topology(flags, region_by_layer, losses_rebinned_per_layer, layers, masks_for_layers=None):
     '''
     For each flagged instance, locate the spatially-connected regions ("blobs")
     where each layer's own thresholded loss overlaps with the matched pattern
@@ -303,9 +303,12 @@ def get_topology(flags, region, losses_rebinned_per_layer, layers, masks_for_lay
     within the same layer) can be told apart downstream.
     Input arguments:
     - flags: boolean array of shape (ninstances,); which instances are flagged.
-    - region: boolean array of shape (ninstances, height, width); the matched
-      pattern region per instance, as returned by patternfiltering.filter_any_pattern
-      (only meaningful where flags is True).
+    - region_by_layer: dict layer -> boolean array of shape (ninstances, height, width),
+      the matched pattern region per instance for that layer, as returned by
+      patternfiltering.filter_any_pattern (only meaningful where flags is True).
+      For the multi-layer case this is the same shared (combined-loss-derived)
+      region repeated for every layer; for the single-layer case each layer has
+      its own, independently-derived region (see run_evaluation()).
     - losses_rebinned_per_layer: dict layer -> array of shape (ninstances, height, width),
       the per-layer rebinned thresholded loss.
     - layers: list of layer names to check.
@@ -324,9 +327,9 @@ def get_topology(flags, region, losses_rebinned_per_layer, layers, masks_for_lay
     '''
     topology = []
     for idx in np.nonzero(flags)[0]:
-        this_region = region[idx].astype(bool)
         blobs = []
         for layer in layers:
+            this_region = region_by_layer[layer][idx].astype(bool)
             overlap = losses_rebinned_per_layer[layer][idx].astype(bool) & this_region
             if not np.any(overlap): continue
             dead_mask = masks_for_layers[layer][0].astype(bool) if masks_for_layers is not None else None
@@ -474,7 +477,9 @@ def run_evaluation(dfs, nmfs,
     losses_combined = np.zeros(losses[layers[0]].shape)
     losses_rebinned_per_layer = {}
     for layer in layers:
+        if debug: np.save(f'losses_thresholded_{layer}.npy', losses_thresholded[layer])
         losses_rebinned_per_layer[layer] = rebinning.rebin_keep_clip(losses_thresholded[layer], target_shape, 1, mode='cv2')
+        if debug: np.save(f'losses_rebinned_{layer}.npy', losses_rebinned_per_layer[layer])
         losses_combined += losses_rebinned_per_layer[layer]
 
     # optional: do loss masking
@@ -510,6 +515,7 @@ def run_evaluation(dfs, nmfs,
 
     # optional: do dynamic loss masking
     dynamic_loss_mask = np.zeros(losses_combined.shape)
+    dynamic_loss_mask_per_layer = {}
     if do_dynamic_loss_masking:
         print('      Calculating and applying dynamic loss mask...')
         window = np.concatenate((np.zeros(dynamic_loss_masking_window+1),
@@ -531,6 +537,9 @@ def run_evaluation(dfs, nmfs,
             # rescale and add to total
             this_dynamic_loss_mask = rebinning.rebin_keep_clip(this_dynamic_loss_mask, target_shape, 1, mode='cv2')
             if debug: np.save(f'dynamic_loss_rebinned_{layer}.npy', this_dynamic_loss_mask)
+            # store the per-layer (rebinned) version too, for the independent
+            # single-layer criterion below
+            dynamic_loss_mask_per_layer[layer] = this_dynamic_loss_mask
             dynamic_loss_mask += this_dynamic_loss_mask
 
     # store some extra intermediate output for debugging
@@ -552,15 +561,32 @@ def run_evaluation(dfs, nmfs,
     region = patternfiltering.filter_any_pattern(losses_combined_binary, flagging_patterns,
                threshold = flagging_threshold)
     flags = np.any(region, axis=(1,2))
+    if debug: np.save('region.npy', region)
 
     # additional criterion: single layer instead of at least 2.
     # reported separately from the multi-layer flags above, for information only
     # (single-layer anomalies are not considered relevant for physics analyses).
-    # uses the same patterns and threshold as the multi-layer case.
-    losses_combined_binary_sl = ((losses_combined >= 1) & (losses_combined > (loss_mask + dynamic_loss_mask))).astype(int)
-    region_sl = patternfiltering.filter_any_pattern(losses_combined_binary_sl, flagging_patterns,
-                  threshold = flagging_threshold)
-    flags_sl = np.any(region_sl, axis=(1,2))
+    # uses the same patterns and threshold as the multi-layer case, but --
+    # unlike the multi-layer criterion, which legitimately needs the combined
+    # loss and combined mask, since it requires >=2 layers' worth of combined
+    # signal -- each layer is checked entirely independently here: its own
+    # (rebinned) thresholded loss against only its own mask, then pattern-
+    # matched on its own. Comparing against the combined mask here would let
+    # another layer's unrelated permanently-masked (dead) pixel spuriously
+    # suppress -- and even split into multiple disconnected blobs -- a single
+    # layer's own genuine, spatially continuous anomaly, wherever the two
+    # happened to coincide in the shared rebinned grid.
+    region_sl_per_layer = {}
+    flags_sl = np.zeros(len(losses_combined), dtype=bool)
+    for layer in layers:
+        this_loss_mask = preprocessed_loss_masks_per_layer_rebinned.get(layer, 0)
+        this_dynamic_loss_mask = dynamic_loss_mask_per_layer.get(layer, 0)
+        losses_binary_sl_layer = ((losses_rebinned_per_layer[layer] >= 1) &
+            (losses_rebinned_per_layer[layer] > (this_loss_mask + this_dynamic_loss_mask))).astype(int)
+        region_sl_per_layer[layer] = patternfiltering.filter_any_pattern(losses_binary_sl_layer, flagging_patterns,
+                                        threshold = flagging_threshold)
+        if debug: np.save(f'region_sl_{layer}.npy', region_sl_per_layer[layer])
+        flags_sl = flags_sl | np.any(region_sl_per_layer[layer], axis=(1,2))
     # exclude lumisections already reported as multi-layer flags,
     # so the two categories are disjoint.
     flags_sl = ((flags_sl) & (~flags))
@@ -569,8 +595,9 @@ def run_evaluation(dfs, nmfs,
     # masked dead region) of each flagged instance, so temporally-adjacent but
     # spatially- or layer-distinct anomalies can be told apart downstream.
     masks_for_layers = preprocessed_loss_masks_per_layer_rebinned if do_loss_masking else None
-    flagged_topology = get_topology(flags, region, losses_rebinned_per_layer, layers, masks_for_layers)
-    flagged_topology_sl = get_topology(flags_sl, region_sl, losses_rebinned_per_layer, layers, masks_for_layers)
+    region_by_layer = {layer: region for layer in layers}
+    flagged_topology = get_topology(flags, region_by_layer, losses_rebinned_per_layer, layers, masks_for_layers)
+    flagged_topology_sl = get_topology(flags_sl, region_sl_per_layer, losses_rebinned_per_layer, layers, masks_for_layers)
 
     # store the flagged lumisections
     flagged_run_numbers = dfs[layers[0]]['run_number'].values[flags]
