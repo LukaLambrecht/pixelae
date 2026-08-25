@@ -50,3 +50,6 @@ automasking/data
 **.dism-artifacts/
 **.cache/
 **.cache-dev/
+
+# ignore cache folders
+**_cache/
