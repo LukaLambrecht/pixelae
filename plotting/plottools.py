@@ -366,7 +366,8 @@ def plot_hist_2d(hist, fig=None, ax=None, figsize=None, title=None, titlesize=No
         norm = mpl.colors.Normalize(vmin=-extremum, vmax=extremum, clip=False)
     if caxrange is not None:
         norm = mpl.colors.Normalize(vmin=caxrange[0], vmax=caxrange[1], clip=False)
-    cmap = copy(mpl.cm.get_cmap('jet'))
+    #cmap = copy(mpl.cm.get_cmap('jet'))
+    cmap = copy(mpl.colormaps['jet']) # newer versions of matplotlib
     cmap.set_under('w')
     cobject = mpl.cm.ScalarMappable(norm=norm, cmap=cmap) # needed for colorbar
     cobject.set_array([]) # ad-hoc bug fix

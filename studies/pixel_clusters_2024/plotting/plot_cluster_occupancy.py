@@ -16,7 +16,8 @@ import plotting.plottools as plottools
 
 
 def plot_cluster_occupancy(hist, fig=None, ax=None, fast=False,
-                           xaxtitlesize=None, yaxtitlesize=None,
+                           do_xaxtitle=True, xaxtitlesize=None,
+                           do_yaxtitle=True, yaxtitlesize=None,
                            **kwargs):
     
     # default arguments
@@ -61,7 +62,7 @@ def plot_cluster_occupancy(hist, fig=None, ax=None, fast=False,
     else: raise Exception('Number of x-bins not recognized.')
         
     # x-axis layout
-    ax.set_xlabel(xaxtitle, fontsize=xaxtitlesize)
+    if do_xaxtitle: ax.set_xlabel(xaxtitle, fontsize=xaxtitlesize)
     for x in axvlines: ax.axvline(x, color='black', linestyle='dotted')
     ax.set_xticks(ticks=xaxticks, labels=xaxticklabels)
         
@@ -106,7 +107,7 @@ def plot_cluster_occupancy(hist, fig=None, ax=None, fast=False,
     yaxticklabels = yaxticklabels[ids]
         
     # y-axis layout
-    ax.set_ylabel(yaxtitle, fontsize=yaxtitlesize)
+    if do_yaxtitle: ax.set_ylabel(yaxtitle, fontsize=yaxtitlesize)
     for y in axhlines: ax.axhline(y, color='black', linestyle='dotted')
     ax.set_yticks(ticks=yaxticks, labels=yaxticklabels)
         
