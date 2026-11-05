@@ -21,6 +21,8 @@ def get_metype(metag):
         metype = f'PXLayer_{metag[-1]}'
     elif metag.lower().startswith('fpix') or metag.lower().startswith('pxdisk'):
         metype = f'PXDisk_{metag[-2:]}'
+    elif metag.lower().startswith('pxring'):
+        metype = f'PXRing_{metag[-1]}'
     else:
         raise Exception(f'ME tag "{metag}" not recognized.')
     return metype
@@ -62,6 +64,7 @@ def make_default_preprocessor(era, layer,
         elif metype=='PXLayer_2': shape = (58, 72)
         elif metype=='PXLayer_3': shape = (90, 72)
         elif metype=='PXLayer_4': shape = (130, 72)
+        elif metype=='PXRing_2': shape = (140, 56)
         nbins = shape[0] * shape[1]
         norm_info['norm'] = [val / nbins for val in norm_info['norm']]
         
@@ -158,6 +161,7 @@ class PreProcessor(object):
         elif self.metype=='PXLayer_2': self.anticrop = (slice(28, 30), slice(32,40))
         elif self.metype=='PXLayer_3': self.anticrop = (slice(44, 46), slice(32,40))
         elif self.metype=='PXLayer_4': self.anticrop = (slice(64, 66), slice(32,40))
+        elif self.metype=='PXRing_2': self.anticrop = (slice(68, 72), slice(24, 32))
         
         # copy global norm attribute
         self.global_norm = global_norm
@@ -168,6 +172,7 @@ class PreProcessor(object):
         elif self.metype=='PXLayer_2': required_dims = (58, 72)
         elif self.metype=='PXLayer_3': required_dims = (90, 72)
         elif self.metype=='PXLayer_4': required_dims = (130, 72)
+        elif self.metype=='PXRing_2': required_dims = (140, 56)
         
         # parse local norm attribute
         self.local_norm = local_norm
@@ -229,18 +234,23 @@ class PreProcessor(object):
         # do preprocessing
         return self.preprocess_mes(mes, runs, lumis, **kwargs)
 
-        
+    
+    def crop(self, mes):
+        if self.anticrop is not None:
+            slicey = self.anticrop[0]
+            slicex = self.anticrop[1]
+            mes = np.delete(mes, slicey, axis=1)
+            mes = np.delete(mes, slicex, axis=2)
+        return mes
+
+    
     def preprocess_mes(self, mes, runs, lumis, verbose=False):
         
         # initialize info for later printing
         preprocessing_info = {'run_number': runs, 'ls_number': lumis}
     
         # remove empty cross
-        if self.anticrop is not None:
-            slicey = self.anticrop[0]
-            slicex = self.anticrop[1]
-            mes = np.delete(mes, slicey, axis=1)
-            mes = np.delete(mes, slicex, axis=2)
+        if self.anticrop is not None: mes = self.crop(mes)
         
         # do global normalization
         if self.global_norm is not None:
@@ -280,6 +290,15 @@ class PreProcessor(object):
         return mes
     
     
+    def decrop(self, mes, value=0):
+        if self.anticrop is not None:
+            slicey = self.anticrop[0]
+            slicex = self.anticrop[1]
+            mes = np.insert(mes, [int(mes.shape[1]/2)]*(slicey.stop-slicey.start), value, axis=1)
+            mes = np.insert(mes, [int(mes.shape[2]/2)]*(slicex.stop-slicex.start), value, axis=2)
+        return mes
+    
+    
     def deprocess(self, mes, runs=None, lumis=None):
         '''
         Inverse operation of preprocess
@@ -301,10 +320,6 @@ class PreProcessor(object):
             mes = np.multiply(mes, norm[:, None, None])
             
         # insert empty cross
-        if self.anticrop is not None:
-            slicey = self.anticrop[0]
-            slicex = self.anticrop[1]
-            mes = np.insert(mes, [int(mes.shape[1]/2)]*2, 0, axis=1)
-            mes = np.insert(mes, [int(mes.shape[2]/2)]*8, 0, axis=2)
+        if self.anticrop is not None: mes = self.decrop(mes)
             
         return mes
